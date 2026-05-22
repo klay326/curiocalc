@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+*.env.local
+
+# Node
+node_modules/
+.next/
+out/
+.expo/
+*.tsbuildinfo
+.npm
+
+# Docker
+*.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Misc
+*.log
+*.sqlite
+caddy_data/
+caddy_config/

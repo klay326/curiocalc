@@ -1,0 +1,25 @@
+curiocalc.org, www.curiocalc.org {
+    # Frontend
+    reverse_proxy frontend:3000
+
+    # API
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    # Compression
+    encode gzip zstd
+
+    # Security headers
+    header {
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}
