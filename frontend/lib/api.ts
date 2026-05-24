@@ -32,6 +32,20 @@ export type AuthUser = {
   display_name: string | null;
   avatar_url: string | null;
   is_verified: boolean;
+  is_superuser: boolean;
+};
+
+export type UserProfile = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  location: string | null;
+  website: string | null;
+  created_at: string;
+  owned_count: number;
+  wanted_count: number;
 };
 
 export type CollectionEntry = {
@@ -47,6 +61,21 @@ export type CollectionEntry = {
   acquired_from: string | null;
   photos: string[];
   created_at: string;
+};
+
+export type EditSuggestion = {
+  id: string;
+  calculator_id: string;
+  submitted_by_id: string | null;
+  submitted_by_username: string | null;
+  proposed_changes: Partial<Calculator>;
+  reason: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewer_note: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  calculator_make: string | null;
+  calculator_model: string | null;
 };
 
 function getToken(): string | null {
@@ -88,17 +117,39 @@ export const api = {
   },
 
   calculators: {
-    list: (params?: { q?: string; calc_type?: string; skip?: number; limit?: number }) => {
+    list: (params?: {
+      q?: string;
+      calc_type?: string;
+      make?: string;
+      tag?: string;
+      decade?: number;
+      sort?: string;
+      order?: string;
+      skip?: number;
+      limit?: number;
+    }) => {
       const query = new URLSearchParams();
       if (params?.q) query.set('q', params.q);
       if (params?.calc_type) query.set('calc_type', params.calc_type);
+      if (params?.make) query.set('make', params.make);
+      if (params?.tag) query.set('tag', params.tag);
+      if (params?.decade != null) query.set('decade', String(params.decade));
+      if (params?.sort) query.set('sort', params.sort);
+      if (params?.order) query.set('order', params.order);
       if (params?.skip != null) query.set('skip', String(params.skip));
       if (params?.limit != null) query.set('limit', String(params.limit));
       return request<Calculator[]>(`/api/v1/calculators?${query}`);
     },
     get: (id: string) => request<Calculator>(`/api/v1/calculators/${id}`),
+    related: (id: string) => request<Calculator[]>(`/api/v1/calculators/related/${id}`),
+    makes: () => request<string[]>('/api/v1/calculators/makes'),
+    tags: () => request<string[]>('/api/v1/calculators/tags'),
     create: (data: Partial<Calculator>) =>
       request<Calculator>('/api/v1/calculators', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<Calculator>) =>
+      request<Calculator>(`/api/v1/calculators/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<void>(`/api/v1/calculators/${id}`, { method: 'DELETE' }),
   },
 
   collection: {
@@ -110,5 +161,23 @@ export const api = {
     update: (id: string, data: Partial<CollectionEntry>) =>
       request<CollectionEntry>(`/api/v1/collections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: string) => request<void>(`/api/v1/collections/${id}`, { method: 'DELETE' }),
+  },
+
+  users: {
+    get: (username: string) => request<UserProfile>(`/api/v1/users/${username}`),
+  },
+
+  suggestions: {
+    submit: (calcId: string, data: { proposed_changes: Partial<Calculator>; reason?: string }) =>
+      request<EditSuggestion>(`/api/v1/calculators/${calcId}/suggestions`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    list: (status?: string) => {
+      const q = status ? `?status=${status}` : '';
+      return request<EditSuggestion[]>(`/api/v1/suggestions${q}`);
+    },
+    review: (id: string, data: { status: 'approved' | 'rejected'; reviewer_note?: string }) =>
+      request<EditSuggestion>(`/api/v1/suggestions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
 };

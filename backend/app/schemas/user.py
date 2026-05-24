@@ -39,3 +39,9 @@ class UserPublic(BaseModel):
 class UserMe(UserPublic):
     email: str
     is_verified: bool
+    is_superuser: bool
+
+
+class UserProfile(UserPublic):
+    owned_count: int = 0
+    wanted_count: int = 0

@@ -38,6 +38,9 @@ class CalculatorUpdate(BaseModel):
     fun_facts: str | None = None
     tags: list[str] | None = None
     external_refs: dict | None = None
+    images: list[str] | None = None
+    rarity_score: float | None = None
+    weirdness_score: float | None = None
 
 
 class CalculatorPublic(CalculatorBase):

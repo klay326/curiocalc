@@ -1,9 +1,68 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+
+const RULES = [
+  { id: 'len',   label: 'At least 8 characters',          test: (p: string) => p.length >= 8 },
+  { id: 'upper', label: 'One uppercase letter (A–Z)',      test: (p: string) => /[A-Z]/.test(p) },
+  { id: 'lower', label: 'One lowercase letter (a–z)',      test: (p: string) => /[a-z]/.test(p) },
+  { id: 'num',   label: 'One number (0–9)',                test: (p: string) => /[0-9]/.test(p) },
+  { id: 'sym',   label: 'One special character (!@#$…)',   test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+];
+
+function PasswordStrength({ password }: { password: string }) {
+  const results = useMemo(() => RULES.map(r => ({ ...r, ok: r.test(password) })), [password]);
+  const score = results.filter(r => r.ok).length;
+
+  const bar = [
+    { min: 0, color: 'bg-zinc-700', label: '' },
+    { min: 1, color: 'bg-red-500',    label: 'Weak' },
+    { min: 2, color: 'bg-orange-500', label: 'Fair' },
+    { min: 3, color: 'bg-yellow-500', label: 'Good' },
+    { min: 4, color: 'bg-lime-500',   label: 'Strong' },
+    { min: 5, color: 'bg-green-500',  label: 'Excellent' },
+  ];
+  const level = password.length === 0 ? bar[0] : bar[Math.max(1, score)];
+
+  if (!password) return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      {/* Strength bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex gap-1">
+          {[1,2,3,4,5].map(i => (
+            <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
+              i <= score ? level.color : 'bg-zinc-800'
+            }`} />
+          ))}
+        </div>
+        {level.label && (
+          <span className={`text-[10px] font-mono font-bold w-16 text-right ${level.color.replace('bg-','text-')}`}>
+            {level.label}
+          </span>
+        )}
+      </div>
+
+      {/* Rules checklist */}
+      <div className="space-y-1">
+        {results.map(rule => (
+          <div key={rule.id} className="flex items-center gap-2">
+            <span className={`text-[11px] transition-colors duration-200 ${rule.ok ? 'text-green-400' : 'text-zinc-600'}`}>
+              {rule.ok ? '✓' : '○'}
+            </span>
+            <span className={`text-[11px] font-mono transition-colors duration-200 ${rule.ok ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              {rule.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function RegisterPage() {
   const { login } = useAuth();
@@ -12,11 +71,18 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const passwordScore = RULES.filter(r => r.test(form.password)).length;
+  const passwordOk = passwordScore >= 4;
+
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!passwordOk) {
+      setError('Please choose a stronger password.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -30,11 +96,10 @@ export default function RegisterPage() {
     }
   };
 
-  const fields = [
-    { key: 'email',        label: 'Email',                    type: 'email',    required: true },
-    { key: 'username',     label: 'Username',                 type: 'text',     required: true },
-    { key: 'display_name', label: 'Display name (optional)',  type: 'text',     required: false },
-    { key: 'password',     label: 'Password',                 type: 'password', required: true },
+  const textFields = [
+    { key: 'email',        label: 'Email',                   type: 'email',    required: true },
+    { key: 'username',     label: 'Username',                type: 'text',     required: true },
+    { key: 'display_name', label: 'Display name (optional)', type: 'text',     required: false },
   ] as const;
 
   return (
@@ -52,7 +117,8 @@ export default function RegisterPage() {
               {error}
             </div>
           )}
-          {fields.map(({ key, label, type, required }) => (
+
+          {textFields.map(({ key, label, type, required }) => (
             <div key={key}>
               <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5">{label}</label>
               <input
@@ -61,8 +127,25 @@ export default function RegisterPage() {
               />
             </div>
           ))}
+
+          {/* Password with strength meter */}
+          <div>
+            <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5">Password</label>
+            <input
+              type="password" value={form.password} onChange={set('password')} required
+              className={`w-full bg-zinc-800 border rounded-lg px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none transition-colors ${
+                form.password
+                  ? passwordOk
+                    ? 'border-green-500/60 focus:border-green-400'
+                    : 'border-zinc-700 focus:border-amber-400'
+                  : 'border-zinc-700 focus:border-amber-400'
+              }`}
+            />
+            <PasswordStrength password={form.password} />
+          </div>
+
           <button
-            type="submit" disabled={loading}
+            type="submit" disabled={loading || (form.password.length > 0 && !passwordOk)}
             className="w-full bg-amber-400 text-zinc-950 rounded-lg py-2.5 font-mono font-bold text-sm hover:bg-amber-300 transition-colors disabled:opacity-50 mt-2"
           >
             {loading ? 'Creating account…' : 'Create account'}

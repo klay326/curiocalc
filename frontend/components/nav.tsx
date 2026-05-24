@@ -33,10 +33,17 @@ export function Nav() {
           {link('/', 'Browse')}
           {user ? (
             <>
-              {link('/collection', 'My Collection')}
-              <span className="text-zinc-600 font-mono text-sm hidden sm:block">
+              {link('/collection', 'Collection')}
+              {link('/calculators/new', '+ Add')}
+              {user.is_superuser && link('/admin', 'Admin')}
+              <Link
+                href={`/u/${user.username}`}
+                className={`text-sm font-mono transition-colors ${
+                  pathname.startsWith('/u/') ? 'text-amber-400' : 'text-zinc-400 hover:text-zinc-100'
+                }`}
+              >
                 @{user.username}
-              </span>
+              </Link>
               <button
                 onClick={logout}
                 className="text-sm font-mono text-zinc-500 hover:text-zinc-300 transition-colors"

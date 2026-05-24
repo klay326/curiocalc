@@ -12,13 +12,34 @@ const TYPE_COLORS: Record<string, string> = {
   other:         'bg-zinc-800/60 text-zinc-400 border-zinc-700/50',
 };
 
-export function CalculatorCard({ calc }: { calc: Calculator }) {
+export function CalculatorCard({ calc, compact = false }: { calc: Calculator; compact?: boolean }) {
   const typeColor = TYPE_COLORS[calc.calc_type] ?? TYPE_COLORS.other;
   const yearLabel = calc.year_introduced
     ? calc.year_discontinued
       ? `${calc.year_introduced}–${calc.year_discontinued}`
       : `${calc.year_introduced}`
     : null;
+
+  if (compact) {
+    return (
+      <Link href={`/calculators/${calc.id}`}>
+        <div className="group bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-amber-400/40 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+          <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
+            {calc.images[0] ? (
+              <img src={calc.images[0]} alt={`${calc.make} ${calc.model}`}
+                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+            ) : (
+              <span className="text-3xl opacity-20 select-none">🧮</span>
+            )}
+          </div>
+          <div className="p-2">
+            <p className="text-[9px] text-zinc-600 font-mono truncate">{calc.make}</p>
+            <p className="text-xs font-bold text-zinc-200 group-hover:text-amber-400 transition-colors truncate leading-tight">{calc.model}</p>
+          </div>
+        </div>
+      </Link>
+    );
+  }
 
   return (
     <Link href={`/calculators/${calc.id}`}>
@@ -29,12 +50,12 @@ export function CalculatorCard({ calc }: { calc: Calculator }) {
             <img
               src={calc.images[0]}
               alt={`${calc.make} ${calc.model}`}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
             />
           ) : (
             <span className="text-5xl opacity-20 select-none">🧮</span>
           )}
-          {calc.weirdness_score && calc.weirdness_score >= 7 && (
+          {calc.weirdness_score != null && calc.weirdness_score >= 7 && (
             <span className="absolute top-2 right-2 text-xs bg-pink-900/80 text-pink-300 px-1.5 py-0.5 rounded font-mono backdrop-blur-sm">
               🌀
             </span>
@@ -42,6 +63,11 @@ export function CalculatorCard({ calc }: { calc: Calculator }) {
           {calc.is_verified && (
             <span className="absolute top-2 left-2 text-xs bg-amber-900/80 text-amber-400 px-1.5 py-0.5 rounded font-mono backdrop-blur-sm">
               ✓
+            </span>
+          )}
+          {calc.rarity_score != null && calc.rarity_score >= 8 && (
+            <span className="absolute bottom-2 right-2 text-xs bg-zinc-900/80 text-zinc-400 px-1.5 py-0.5 rounded font-mono backdrop-blur-sm">
+              💎
             </span>
           )}
         </div>

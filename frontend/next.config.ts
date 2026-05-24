@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone", // enables minimal Docker image for prod
+  output: "standalone",
+  allowedDevOrigins: ["curiocalc.org", "www.curiocalc.org"],
 };
 
 export default nextConfig;

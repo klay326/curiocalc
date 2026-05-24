@@ -14,6 +14,9 @@ CMD ["npm", "run", "dev"]
 
 # ── Builder ────────────────────────────────────────────
 FROM deps AS builder
+# NEXT_PUBLIC_ vars must be present at build time — they get inlined into the JS bundle
+ARG NEXT_PUBLIC_API_URL=https://api.curiocalc.org
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY . .
 RUN npm run build
 

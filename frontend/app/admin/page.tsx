@@ -1,0 +1,357 @@
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { api, type Calculator, type EditSuggestion } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+
+const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
+
+export default function AdminPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const [tab, setTab] = useState<'calcs' | 'suggestions'>('calcs');
+
+  useEffect(() => {
+    if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
+  }, [user, authLoading, router]);
+
+  if (authLoading) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="text-zinc-600 font-mono text-sm animate-pulse">Loading…</div>
+    </div>
+  );
+  if (!user?.is_superuser) return null;
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-10">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold font-mono text-amber-400">Admin</h1>
+        </div>
+        <Link href="/calculators/new"
+          className="bg-amber-400 text-zinc-950 px-4 py-2 rounded-lg font-mono font-bold text-sm hover:bg-amber-300 transition-colors">
+          + Add Calculator
+        </Link>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+        {(['calcs', 'suggestions'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
+              tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
+            }`}>{t}</button>
+        ))}
+      </div>
+
+      {tab === 'calcs' ? <CalcsTab /> : <SuggestionsTab />}
+    </div>
+  );
+}
+
+/* ────────────────────────────────── Calculators tab ── */
+function CalcsTab() {
+  const [calcs, setCalcs] = useState<Calculator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Calculator> & { tags_str?: string }>({});
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try { const data = await api.calculators.list({ limit: 500 }); setCalcs(data); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const filtered = calcs.filter(c =>
+    !query || `${c.make} ${c.model}`.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const startEdit = (calc: Calculator) => {
+    setEditing(calc.id);
+    setEditForm({ ...calc, tags_str: calc.tags.join(', ') });
+    setError('');
+  };
+  const cancelEdit = () => { setEditing(null); setEditForm({}); };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    setSaving(true); setError('');
+    try {
+      const { tags_str, ...rest } = editForm;
+      const payload = {
+        ...rest,
+        tags: tags_str ? tags_str.split(',').map(t => t.trim()).filter(Boolean) : [],
+        year_introduced: editForm.year_introduced ? Number(editForm.year_introduced) : undefined,
+        year_discontinued: editForm.year_discontinued ? Number(editForm.year_discontinued) : undefined,
+        num_keys: editForm.num_keys ? Number(editForm.num_keys) : undefined,
+      };
+      await api.calculators.update(editing, payload);
+      await fetchAll();
+      setEditing(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally { setSaving(false); }
+  };
+
+  const deleteCalc = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    setDeleting(id);
+    try {
+      await api.calculators.delete(id);
+      setCalcs(prev => prev.filter(c => c.id !== id));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    } finally { setDeleting(null); }
+  };
+
+  const setField = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setEditForm(prev => ({ ...prev, [k]: e.target.value }));
+
+  if (loading) return <div className="text-zinc-600 font-mono text-sm animate-pulse">Loading…</div>;
+
+  return (
+    <>
+      {error && (
+        <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-3 text-red-400 text-xs font-mono mb-4">{error}</div>
+      )}
+      <div className="flex items-center gap-3 mb-4">
+        <input type="text" placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)}
+          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400" />
+        <span className="text-xs text-zinc-600 font-mono">{filtered.length} / {calcs.length}</span>
+      </div>
+
+      <div className="space-y-2">
+        {filtered.map(calc => (
+          <div key={calc.id} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            {editing === calc.id ? (
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <AdminField label="Make"              value={editForm.make ?? ''}                     onChange={setField('make')} />
+                  <AdminField label="Model"             value={editForm.model ?? ''}                    onChange={setField('model')} />
+                  <AdminField label="Year introduced"   value={String(editForm.year_introduced ?? '')}  onChange={setField('year_introduced')}  type="number" />
+                  <AdminField label="Year discontinued" value={String(editForm.year_discontinued ?? '')} onChange={setField('year_discontinued')} type="number" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="label">Type</label>
+                    <select value={editForm.calc_type ?? ''} onChange={setField('calc_type')} className="select">
+                      {CALC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <AdminField label="Display type"  value={editForm.display_type ?? ''}       onChange={setField('display_type')} />
+                  <AdminField label="Power source"  value={editForm.power_source ?? ''}       onChange={setField('power_source')} />
+                  <AdminField label="Num keys"      value={String(editForm.num_keys ?? '')}   onChange={setField('num_keys')} type="number" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <AdminField label="Country"        value={editForm.country_of_origin ?? ''} onChange={setField('country_of_origin')} />
+                  <AdminField label="Rarity (1-10)"  value={String(editForm.rarity_score ?? '')}    onChange={setField('rarity_score')}    type="number" />
+                  <AdminField label="Weirdness (1-10)" value={String(editForm.weirdness_score ?? '')} onChange={setField('weirdness_score')} type="number" />
+                </div>
+                <div>
+                  <label className="label">Tags (comma-separated)</label>
+                  <input value={editForm.tags_str ?? ''} onChange={setField('tags_str')} className="input" />
+                </div>
+                <div>
+                  <label className="label">Images (URLs, comma-separated)</label>
+                  <input value={(editForm.images ?? []).join(', ')}
+                    onChange={e => setEditForm(prev => ({ ...prev, images: e.target.value.split(',').map(s=>s.trim()).filter(Boolean) }))}
+                    className="input" />
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea value={editForm.description ?? ''} onChange={setField('description')} rows={3} className="input resize-none" />
+                </div>
+                <div>
+                  <label className="label">Fun facts</label>
+                  <textarea value={editForm.fun_facts ?? ''} onChange={setField('fun_facts')} rows={2} className="input resize-none" />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={saveEdit} disabled={saving}
+                    className="bg-amber-400 text-zinc-950 px-4 py-2 rounded-lg font-mono font-bold text-xs hover:bg-amber-300 transition-colors disabled:opacity-50">
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button onClick={cancelEdit}
+                    className="border border-zinc-700 text-zinc-400 px-4 py-2 rounded-lg font-mono text-xs hover:border-zinc-500 hover:text-zinc-200 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4 px-4 py-3">
+                {calc.images[0] ? (
+                  <img src={calc.images[0]} alt="" className="w-12 h-9 object-contain rounded flex-shrink-0 bg-zinc-800" />
+                ) : (
+                  <div className="w-12 h-9 bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center text-xl">🧮</div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold font-mono text-sm text-zinc-100">{calc.make} {calc.model}</span>
+                    {calc.year_introduced && <span className="text-[10px] text-zinc-600 font-mono">{calc.year_introduced}</span>}
+                    <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">{calc.calc_type}</span>
+                    {calc.is_verified && <span className="text-[10px] text-amber-400 font-mono">✓</span>}
+                  </div>
+                  {calc.description && (
+                    <p className="text-[11px] text-zinc-600 font-mono truncate mt-0.5">{calc.description.slice(0, 100)}</p>
+                  )}
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <Link href={`/calculators/${calc.id}`}
+                    className="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono px-2 py-1 rounded border border-zinc-800 hover:border-zinc-600 transition-colors">
+                    view
+                  </Link>
+                  <button onClick={() => startEdit(calc)}
+                    className="text-[11px] text-zinc-400 hover:text-amber-400 font-mono px-2 py-1 rounded border border-zinc-800 hover:border-amber-400/40 transition-colors">
+                    edit
+                  </button>
+                  <button onClick={() => deleteCalc(calc.id, `${calc.make} ${calc.model}`)} disabled={deleting === calc.id}
+                    className="text-[11px] text-zinc-600 hover:text-red-400 font-mono px-2 py-1 rounded border border-zinc-800 hover:border-red-900/50 transition-colors disabled:opacity-50">
+                    {deleting === calc.id ? '…' : 'del'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ────────────────────────────────── Suggestions tab ── */
+function SuggestionsTab() {
+  const [suggestions, setSuggestions] = useState<EditSuggestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected' | ''>('pending');
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setSuggestions(await api.suggestions.list(filter || undefined)); }
+    finally { setLoading(false); }
+  }, [filter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const review = async (id: string, status: 'approved' | 'rejected') => {
+    setReviewing(id);
+    try {
+      const updated = await api.suggestions.review(id, { status, reviewer_note: note || undefined });
+      setSuggestions(prev => prev.map(s => s.id === id ? updated : s));
+      setNote('');
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+    finally { setReviewing(null); }
+  };
+
+  const pending = suggestions.filter(s => s.status === 'pending');
+
+  return (
+    <>
+      <div className="flex gap-2 mb-6">
+        {(['pending', 'approved', 'rejected', ''] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
+              filter === f
+                ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold'
+                : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+            }`}>
+            {f || 'all'}
+            {f === 'pending' && pending.length > 0 && (
+              <span className="ml-1.5 bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{pending.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="text-zinc-600 font-mono text-sm animate-pulse">Loading…</div>
+      ) : suggestions.length === 0 ? (
+        <div className="text-center py-16 text-zinc-600 font-mono text-sm">
+          <div className="text-4xl mb-3">✅</div>
+          No suggestions in this queue.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {suggestions.map(s => (
+            <div key={s.id} className={`bg-zinc-900 border rounded-xl p-5 ${
+              s.status === 'pending' ? 'border-amber-900/40' :
+              s.status === 'approved' ? 'border-green-900/40' : 'border-zinc-800'
+            }`}>
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div>
+                  <Link href={`/calculators/${s.calculator_id}`}
+                    className="font-bold font-mono text-zinc-100 hover:text-amber-400 transition-colors">
+                    {s.calculator_make} {s.calculator_model}
+                  </Link>
+                  <p className="text-[10px] text-zinc-600 font-mono mt-0.5">
+                    by @{s.submitted_by_username ?? 'unknown'} · {new Date(s.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <span className={`text-[10px] px-2 py-1 rounded font-mono font-bold flex-shrink-0 ${
+                  s.status === 'pending'  ? 'bg-amber-900/30 text-amber-400' :
+                  s.status === 'approved' ? 'bg-green-900/30 text-green-400' :
+                                            'bg-zinc-800 text-zinc-500'
+                }`}>{s.status}</span>
+              </div>
+
+              {/* Proposed changes */}
+              <div className="bg-zinc-800/50 rounded-lg p-3 mb-3 space-y-2">
+                {Object.entries(s.proposed_changes).map(([key, val]) => (
+                  <div key={key} className="flex gap-3 text-xs font-mono">
+                    <span className="text-zinc-500 w-36 flex-shrink-0">{key.replace(/_/g,' ')}</span>
+                    <span className="text-zinc-200 break-all">{Array.isArray(val) ? val.join(', ') : String(val)}</span>
+                  </div>
+                ))}
+              </div>
+
+              {s.reason && (
+                <p className="text-xs text-zinc-500 font-mono italic mb-3">"{s.reason}"</p>
+              )}
+              {s.reviewer_note && (
+                <p className="text-xs text-zinc-500 font-mono mb-3">
+                  <span className="text-zinc-600">reviewer note:</span> {s.reviewer_note}
+                </p>
+              )}
+
+              {s.status === 'pending' && (
+                <div className="flex gap-2 items-center flex-wrap">
+                  <input value={note} onChange={e => setNote(e.target.value)}
+                    placeholder="Optional reviewer note…"
+                    className="flex-1 min-w-[180px] bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-zinc-200 font-mono text-xs focus:outline-none focus:border-amber-400" />
+                  <button onClick={() => review(s.id, 'approved')} disabled={reviewing === s.id}
+                    className="px-3 py-1.5 bg-green-900/40 text-green-400 border border-green-900/50 rounded-lg font-mono text-xs font-bold hover:bg-green-900/60 transition-colors disabled:opacity-50">
+                    {reviewing === s.id ? '…' : '✓ approve'}
+                  </button>
+                  <button onClick={() => review(s.id, 'rejected')} disabled={reviewing === s.id}
+                    className="px-3 py-1.5 bg-red-900/20 text-red-400 border border-red-900/30 rounded-lg font-mono text-xs hover:bg-red-900/30 transition-colors disabled:opacity-50">
+                    ✕ reject
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function AdminField({ label, value, onChange, type = 'text' }: {
+  label: string; value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  type?: string;
+}) {
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <input type={type} value={value} onChange={onChange} className="input" />
+    </div>
+  );
+}

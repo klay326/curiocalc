@@ -30,7 +30,6 @@ services:
   backend:
     build:
       context: ./backend
-      target: dev
     env_file: .env
     depends_on:
       postgres:
@@ -41,20 +40,24 @@ services:
       - ./backend:/app
     ports:
       - "8000:8000"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      gunicorn app.main:app
+      --worker-class uvicorn.workers.UvicornWorker
+      --workers 2
+      --bind 0.0.0.0:8000
+      --access-logfile -
+      --error-logfile -
 
   frontend:
     build:
       context: ./frontend
-      target: dev
+      target: prod
+      args:
+        NEXT_PUBLIC_API_URL: https://api.curiocalc.org
     env_file: .env
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    command: npm run dev
+    restart: unless-stopped
 
 volumes:
   postgres_data:
