@@ -12,6 +12,8 @@ export default function CalculatorPage() {
   const router = useRouter();
   const [calc, setCalc] = useState<Calculator | null>(null);
   const [related, setRelated] = useState<Calculator[]>([]);
+  const [variants, setVariants] = useState<Calculator[]>([]);
+  const [parentCalc, setParentCalc] = useState<Calculator | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
   const [addStatus, setAddStatus] = useState<'owned' | 'wanted' | null>(null);
@@ -21,11 +23,21 @@ export default function CalculatorPage() {
   useEffect(() => {
     setLoading(true);
     setActiveImg(0);
-    Promise.all([
-      api.calculators.get(id),
-      api.calculators.related(id).catch(() => []),
-    ])
-      .then(([c, r]) => { setCalc(c); setRelated(r); })
+    setVariants([]);
+    setParentCalc(null);
+    api.calculators.get(id)
+      .then(async (c) => {
+        setCalc(c);
+        // Load related, variants, and parent in parallel
+        const [r, v, p] = await Promise.all([
+          api.calculators.related(id).catch(() => []),
+          api.calculators.variants(id).catch(() => []),
+          c.parent_id ? api.calculators.get(c.parent_id).catch(() => null) : Promise.resolve(null),
+        ]);
+        setRelated(r);
+        setVariants(v);
+        setParentCalc(p);
+      })
       .catch(() => router.push('/'))
       .finally(() => setLoading(false));
   }, [id, router]);
@@ -107,11 +119,28 @@ export default function CalculatorPage() {
         <div>
           <div className="flex items-start justify-between gap-2 mb-1">
             <p className="text-zinc-500 font-mono text-xs">{calc.make}</p>
-            {calc.is_verified && (
-              <span className="text-[10px] bg-amber-900/30 text-amber-400 border border-amber-900/50 px-1.5 py-0.5 rounded font-mono">✓ verified</span>
-            )}
+            <div className="flex items-center gap-2">
+              {calc.is_verified && (
+                <span className="text-[10px] bg-amber-900/30 text-amber-400 border border-amber-900/50 px-1.5 py-0.5 rounded font-mono">✓ verified</span>
+              )}
+              {calc.parent_id && (
+                <span className="text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700 px-1.5 py-0.5 rounded font-mono">variant</span>
+              )}
+            </div>
           </div>
           <h1 className="text-3xl font-bold text-amber-400 font-mono mb-1 leading-tight">{calc.model}</h1>
+          {calc.variant_label && (
+            <p className="text-sm font-mono text-zinc-400 mb-1 italic">{calc.variant_label}</p>
+          )}
+          {/* Parent calc link */}
+          {parentCalc && (
+            <div className="mb-3">
+              <Link href={`/calculators/${parentCalc.id}`}
+                className="text-xs font-mono text-zinc-500 hover:text-amber-400 transition-colors">
+                ↑ Variant of {parentCalc.make} {parentCalc.model}
+              </Link>
+            </div>
+          )}
           {yearRange && <p className="text-zinc-500 font-mono text-sm mb-5">{yearRange}</p>}
 
           {/* Add to collection */}
@@ -205,6 +234,39 @@ export default function CalculatorPage() {
         <div className="mt-3 bg-pink-950/20 border border-pink-900/30 rounded-xl p-6">
           <h2 className="text-[10px] font-mono text-pink-500 mb-3 uppercase tracking-widest">🌀 Fun Facts</h2>
           <p className="text-zinc-300 leading-relaxed text-sm whitespace-pre-line">{calc.fun_facts}</p>
+        </div>
+      )}
+
+      {/* Variants */}
+      {variants.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-[10px] font-mono text-zinc-600 mb-4 uppercase tracking-widest">
+            Variants &amp; colorways
+            <span className="ml-2 text-zinc-700 normal-case">({variants.length})</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {variants.map(v => (
+              <Link key={v.id} href={`/calculators/${v.id}`}
+                className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl p-3 hover:border-zinc-600 transition-colors group">
+                <div className="w-12 h-12 flex-shrink-0 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center">
+                  {v.images[0] ? (
+                    <img src={v.images[0]} alt={v.model} className="w-full h-full object-contain" />
+                  ) : (
+                    <span className="text-2xl opacity-20">🧮</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-mono text-zinc-200 group-hover:text-amber-400 transition-colors truncate">{v.model}</p>
+                  {v.variant_label && (
+                    <p className="text-xs font-mono text-zinc-500 italic truncate">{v.variant_label}</p>
+                  )}
+                  {v.year_introduced && (
+                    <p className="text-[10px] font-mono text-zinc-600">{v.year_introduced}</p>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

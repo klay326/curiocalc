@@ -92,6 +92,11 @@ export function CalculatorCard({ calc, compact = false }: { calc: Calculator; co
             <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${typeColor}`}>
               {calc.calc_type}
             </span>
+            {calc.variant_count > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded border font-mono bg-zinc-800/60 text-zinc-500 border-zinc-700/50">
+                {calc.variant_count} variant{calc.variant_count !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
 
           {(calc.owner_count > 0 || calc.want_count > 0) && (

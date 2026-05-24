@@ -21,6 +21,9 @@ export type Calculator = {
   external_refs: Record<string, string>;
   owner_count: number;
   want_count: number;
+  variant_count: number;
+  parent_id: string | null;
+  variant_label: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -125,6 +128,7 @@ export const api = {
       decade?: number;
       sort?: string;
       order?: string;
+      include_variants?: boolean;
       skip?: number;
       limit?: number;
     }) => {
@@ -136,11 +140,13 @@ export const api = {
       if (params?.decade != null) query.set('decade', String(params.decade));
       if (params?.sort) query.set('sort', params.sort);
       if (params?.order) query.set('order', params.order);
+      if (params?.include_variants) query.set('include_variants', 'true');
       if (params?.skip != null) query.set('skip', String(params.skip));
       if (params?.limit != null) query.set('limit', String(params.limit));
       return request<Calculator[]>(`/api/v1/calculators?${query}`);
     },
     get: (id: string) => request<Calculator>(`/api/v1/calculators/${id}`),
+    variants: (id: string) => request<Calculator[]>(`/api/v1/calculators/${id}/variants`),
     related: (id: string) => request<Calculator[]>(`/api/v1/calculators/related/${id}`),
     makes: () => request<string[]>('/api/v1/calculators/makes'),
     tags: () => request<string[]>('/api/v1/calculators/tags'),

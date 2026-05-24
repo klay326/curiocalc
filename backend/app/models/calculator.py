@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Integer, Float, Text, JSON, Boolean, func
+from sqlalchemy import String, DateTime, Integer, Float, Text, JSON, Boolean, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -51,6 +51,14 @@ class Calculator(Base):
 
     tags: Mapped[list] = mapped_column(JSON, default=list)
 
+    # Variants — self-referential relationship
+    # parent_id points to the "canonical" model; NULL means this IS the canonical model
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("calculators.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    variant_label: Mapped[str | None] = mapped_column(String(150))
+    # e.g. "Silver Edition", "UK Version", "1996 Revision", "Target Exclusive"
+
     # Moderation
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
@@ -60,3 +68,8 @@ class Calculator(Base):
 
     # Relationships
     collection_entries: Mapped[list["CollectionEntry"]] = relationship(back_populates="calculator", lazy="dynamic")  # noqa: F821
+    variants: Mapped[list["Calculator"]] = relationship(
+        "Calculator",
+        primaryjoin="Calculator.id == foreign(Calculator.parent_id)",
+        lazy="select",
+    )

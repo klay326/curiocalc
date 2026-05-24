@@ -18,6 +18,9 @@ class CalculatorBase(BaseModel):
     manual_url: str | None = None
     external_refs: dict = {}
     tags: list[str] = []
+    # Variants
+    parent_id: uuid.UUID | None = None
+    variant_label: str | None = None
 
 
 class CalculatorCreate(CalculatorBase):
@@ -41,6 +44,8 @@ class CalculatorUpdate(BaseModel):
     images: list[str] | None = None
     rarity_score: float | None = None
     weirdness_score: float | None = None
+    parent_id: uuid.UUID | None = None
+    variant_label: str | None = None
 
 
 class CalculatorPublic(CalculatorBase):
@@ -54,5 +59,6 @@ class CalculatorPublic(CalculatorBase):
     # computed fields
     owner_count: int = 0
     want_count: int = 0
+    variant_count: int = 0  # number of known variants (0 for variants themselves)
 
     model_config = {"from_attributes": True}

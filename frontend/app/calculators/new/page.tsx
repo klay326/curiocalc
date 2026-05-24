@@ -1,24 +1,24 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, type Calculator } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
 const DISPLAY_TYPES = ['LCD','LED','VFD','color LCD','nixie tube','CRT','e-paper','thermal paper','mechanical','relay'];
-const REQUIRED = ['make','model','calc_type'] as const;
 
 type Form = {
   make: string; model: string; year_introduced: string; year_discontinued: string;
   calc_type: string; display_type: string; power_source: string; num_keys: string;
   country_of_origin: string; description: string; fun_facts: string; tags: string;
+  variant_label: string;
 };
 
 const EMPTY: Form = {
   make:'', model:'', year_introduced:'', year_discontinued:'', calc_type:'scientific',
   display_type:'LCD', power_source:'', num_keys:'', country_of_origin:'',
-  description:'', fun_facts:'', tags:'',
+  description:'', fun_facts:'', tags:'', variant_label:'',
 };
 
 export default function NewCalculatorPage() {
@@ -27,9 +27,29 @@ export default function NewCalculatorPage() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Variant parent search
+  const [parentSearch, setParentSearch] = useState('');
+  const [parentResults, setParentResults] = useState<Calculator[]>([]);
+  const [parentCalc, setParentCalc] = useState<Calculator | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
+
+  // Debounced parent search
+  useEffect(() => {
+    if (!parentSearch.trim() || parentCalc) { setParentResults([]); return; }
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await api.calculators.list({ q: parentSearch, limit: 6 });
+        setParentResults(results);
+      } catch { setParentResults([]); }
+      finally { setSearching(false); }
+    }, 350);
+  }, [parentSearch, parentCalc]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +66,8 @@ export default function NewCalculatorPage() {
         description: form.description.trim() || undefined,
         fun_facts: form.fun_facts.trim() || undefined,
         tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+        parent_id: parentCalc?.id || undefined,
+        variant_label: form.variant_label.trim() || undefined,
       };
       if (form.year_introduced) payload.year_introduced = parseInt(form.year_introduced);
       if (form.year_discontinued) payload.year_discontinued = parseInt(form.year_discontinued);
@@ -125,6 +147,64 @@ export default function NewCalculatorPage() {
           <TextArea label="Fun facts / lore" value={form.fun_facts} onChange={set('fun_facts')}
             placeholder="Weird quirks, famous uses, collector notes…" rows={3} />
           <Field label="Tags (comma-separated)" value={form.tags} onChange={set('tags')} placeholder="graphing, school, iconic, TI" />
+        </section>
+
+        {/* Variant */}
+        <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+          <div>
+            <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Variant / Colorway</h2>
+            <p className="text-[10px] text-zinc-600 font-mono mt-0.5">Optional — use if this is a regional edition, colorway, or revision of an existing model</p>
+          </div>
+
+          {parentCalc ? (
+            <div className="flex items-center justify-between bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5">
+              <div>
+                <p className="text-xs font-mono text-zinc-200">{parentCalc.make} {parentCalc.model}</p>
+                <p className="text-[10px] font-mono text-zinc-500">parent model</p>
+              </div>
+              <button onClick={() => { setParentCalc(null); setParentSearch(''); }}
+                className="text-zinc-600 hover:text-zinc-300 transition-colors text-sm font-mono">
+                ✕ remove
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input
+                type="text"
+                value={parentSearch}
+                onChange={e => setParentSearch(e.target.value)}
+                placeholder="Search for parent model (e.g. TI-84 Plus)…"
+                className="input pr-8"
+              />
+              {searching && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs animate-pulse">…</span>
+              )}
+              {parentResults.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden shadow-xl">
+                  {parentResults.map(r => (
+                    <button key={r.id} type="button"
+                      onClick={() => { setParentCalc(r); setParentSearch(''); setParentResults([]); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 transition-colors text-left">
+                      {r.images[0] && (
+                        <img src={r.images[0]} alt="" className="w-8 h-8 rounded object-contain bg-zinc-900 flex-shrink-0" />
+                      )}
+                      <div>
+                        <p className="text-sm font-mono text-zinc-200">{r.make} {r.model}</p>
+                        <p className="text-[10px] font-mono text-zinc-500">{r.year_introduced ?? '?'} · {r.calc_type}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <Field
+            label="Variant label"
+            value={form.variant_label}
+            onChange={set('variant_label')}
+            placeholder="e.g. Silver Edition, UK Version, 1996 Revision"
+          />
         </section>
 
         <button
