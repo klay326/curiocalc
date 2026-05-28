@@ -55,6 +55,7 @@ export function Nav() {
           {link('/compare', 'Compare')}
           {user ? (
             <>
+              {link('/feed', 'Feed')}
               {link('/collection', 'Collection')}
               {link('/calculators/new', '+ Add')}
               {user.is_superuser && link('/admin', 'Admin')}

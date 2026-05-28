@@ -79,6 +79,9 @@ export default function UserProfilePage() {
   const [tab, setTab] = useState<Tab>('owned');
   const [wishlistCopied, setWishlistCopied] = useState(false);
   const [hoveredBadge, setHoveredBadge] = useState<string | null>(null);
+  const [following, setFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -88,6 +91,8 @@ export default function UserProfilePage() {
     ])
       .then(async ([p, e]) => {
         setProfile(p);
+        setFollowing(p.is_following);
+        setFollowerCount(p.follower_count);
         setEntries(e);
         const ids = [...new Set(e.map(entry => entry.calculator_id))];
         const calcs = await Promise.all(ids.map(id => api.calculators.get(id).catch(() => null)));
@@ -98,6 +103,23 @@ export default function UserProfilePage() {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [username]);
+
+  const toggleFollow = async () => {
+    if (!me) return;
+    setFollowLoading(true);
+    try {
+      if (following) {
+        await api.users.unfollow(username);
+        setFollowing(false);
+        setFollowerCount(n => n - 1);
+      } else {
+        await api.users.follow(username);
+        setFollowing(true);
+        setFollowerCount(n => n + 1);
+      }
+    } catch (e) { console.error(e); }
+    finally { setFollowLoading(false); }
+  };
 
   const copyWishlistLink = () => {
     const url = `${window.location.origin}/u/${username}/wishlist`;
@@ -157,11 +179,22 @@ export default function UserProfilePage() {
         <Link href="/" className="text-xs text-zinc-500 font-mono hover:text-zinc-300 transition-colors">
           ← back to catalog
         </Link>
-        {isOwn && (
+        {isOwn ? (
           <Link href="/settings"
             className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-500 px-3 py-1.5 rounded-lg transition-colors">
             ⚙ Edit profile
           </Link>
+        ) : me && (
+          <button
+            onClick={toggleFollow}
+            disabled={followLoading}
+            className={`text-xs font-mono px-4 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+              following
+                ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-red-950/40 hover:text-red-400 hover:border-red-900/50'
+                : 'bg-amber-400 text-zinc-950 border-amber-400 hover:bg-amber-300 font-bold'
+            }`}>
+            {followLoading ? '…' : following ? 'Following' : 'Follow'}
+          </button>
         )}
       </div>
 
@@ -194,7 +227,7 @@ export default function UserProfilePage() {
         </div>
 
         {/* Stats */}
-        <div className="flex gap-3 flex-shrink-0">
+        <div className="flex gap-3 flex-shrink-0 flex-wrap">
           <div className="text-center bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
             <p className="text-2xl font-bold text-amber-400 font-mono">{profile.owned_count}</p>
             <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">owned</p>
@@ -202,6 +235,14 @@ export default function UserProfilePage() {
           <div className="text-center bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
             <p className="text-2xl font-bold text-zinc-300 font-mono">{profile.wanted_count}</p>
             <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">wanted</p>
+          </div>
+          <div className="text-center bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+            <p className="text-2xl font-bold text-zinc-300 font-mono">{followerCount}</p>
+            <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">followers</p>
+          </div>
+          <div className="text-center bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+            <p className="text-2xl font-bold text-zinc-300 font-mono">{profile.following_count}</p>
+            <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">following</p>
           </div>
           {forSaleEntries.length > 0 && (
             <div className="text-center bg-zinc-900 border border-green-900/40 rounded-xl px-4 py-3">

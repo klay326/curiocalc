@@ -46,3 +46,6 @@ class UserMe(UserPublic):
 class UserProfile(UserPublic):
     owned_count: int = 0
     wanted_count: int = 0
+    follower_count: int = 0
+    following_count: int = 0
+    is_following: bool = False

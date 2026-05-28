@@ -8,6 +8,7 @@ from app.models.user import User
 from app.services.auth import decode_token
 
 bearer = HTTPBearer()
+bearer_optional = HTTPBearer(auto_error=False)
 
 
 async def get_db():
@@ -30,6 +31,20 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     return user
+
+
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_optional),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    if not credentials:
+        return None
+    user_id = decode_token(credentials.credentials)
+    if not user_id:
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    return user if user and user.is_active else None
 
 
 async def get_current_superuser(user: User = Depends(get_current_user)) -> User:

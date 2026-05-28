@@ -55,6 +55,7 @@ export type UserProfile = {
   wanted_count: number;
   follower_count: number;
   following_count: number;
+  is_following: boolean;
 };
 
 export type LeaderboardEntry = {
@@ -70,6 +71,23 @@ export type FollowUser = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+};
+
+export type FeedItem = {
+  id: string;
+  status: 'owned' | 'wanted' | 'for_sale';
+  condition: string | null;
+  notes: string | null;
+  created_at: string;
+  user: { username: string; display_name: string | null; avatar_url: string | null };
+  calculator: {
+    id: string;
+    make: string;
+    model: string;
+    calc_type: string;
+    images: string[];
+    year_introduced: number | null;
+  };
 };
 
 export type CollectionEntry = {
@@ -310,11 +328,17 @@ export const api = {
     }) => request<AuthUser>('/api/v1/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
     leaderboard: () => request<LeaderboardEntry[]>('/api/v1/users/leaderboard'),
     follow: (username: string) =>
-      request<{ status: string }>(`/api/v1/users/${username}/follow`, { method: 'POST' }),
+      request<void>(`/api/v1/users/${username}/follow`, { method: 'POST' }),
     unfollow: (username: string) =>
-      request<{ status: string }>(`/api/v1/users/${username}/follow`, { method: 'DELETE' }),
+      request<void>(`/api/v1/users/${username}/follow`, { method: 'DELETE' }),
     followers: (username: string) => request<FollowUser[]>(`/api/v1/users/${username}/followers`),
     following: (username: string) => request<FollowUser[]>(`/api/v1/users/${username}/following`),
+    feed: (params?: { limit?: number; skip?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.skip) q.set('skip', String(params.skip));
+      return request<FeedItem[]>(`/api/v1/feed?${q}`);
+    },
     generateApiKey: () =>
       request<AuthUser>('/api/v1/users/me/api-key', { method: 'POST' }),
   },
