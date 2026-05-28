@@ -21,6 +21,7 @@ class UserUpdate(BaseModel):
     bio: str | None = None
     location: str | None = None
     website: str | None = None
+    avatar_url: str | None = None
 
 
 class UserPublic(BaseModel):

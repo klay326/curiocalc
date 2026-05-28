@@ -7,6 +7,27 @@ import { useAuth } from '@/lib/auth';
 
 type EntryWithCalc = CollectionEntry & { calculator?: Calculator };
 
+function exportCSV(entries: EntryWithCalc[], username: string) {
+  const headers = ['Make', 'Model', 'Status', 'Condition', 'Notes', 'Acquired From', 'Price Paid', 'Date Added', 'Year Introduced'];
+  const rows = entries.map(e => [
+    e.calculator?.make ?? '',
+    e.calculator?.model ?? e.calculator_id,
+    e.status,
+    e.condition ?? '',
+    (e.notes ?? '').replace(/,/g, ';'),
+    (e.acquired_from ?? '').replace(/,/g, ';'),
+    e.acquired_price != null ? String(e.acquired_price) : '',
+    new Date(e.created_at).toLocaleDateString(),
+    e.calculator?.year_introduced != null ? String(e.calculator.year_introduced) : '',
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `curiocalc-${username}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
 export default function CollectionPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -40,16 +61,25 @@ export default function CollectionPage() {
 
   if (authLoading || !user) return null;
 
-  const owned  = entries.filter(e => e.status === 'owned');
-  const wanted = entries.filter(e => e.status === 'wanted');
+  const owned   = entries.filter(e => e.status === 'owned');
+  const wanted  = entries.filter(e => e.status === 'wanted');
   const forSale = entries.filter(e => e.status === 'for_sale');
   const filtered = activeTab === 'owned' ? owned : wanted;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold font-mono text-amber-400">My Collection</h1>
-        <p className="text-zinc-600 text-xs font-mono mt-1">@{user.username}</p>
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold font-mono text-amber-400">My Collection</h1>
+          <p className="text-zinc-600 text-xs font-mono mt-1">@{user.username}</p>
+        </div>
+        <button
+          onClick={() => exportCSV(entries, user.username)}
+          disabled={entries.length === 0}
+          className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors disabled:opacity-30 flex items-center gap-1.5"
+        >
+          ⬇ Export CSV
+        </button>
       </div>
 
       {/* Stats */}
@@ -81,6 +111,12 @@ export default function CollectionPage() {
             {tab === 'owned' ? `Owned (${owned.length})` : `Wishlist (${wanted.length})`}
           </button>
         ))}
+        {forSale.length > 0 && (
+          <Link href="/trade"
+            className="px-4 py-2 rounded-lg font-mono text-sm text-green-400 border border-green-900/40 hover:border-green-700/60 transition-colors">
+            🏷 For sale ({forSale.length})
+          </Link>
+        )}
       </div>
 
       {/* Entries */}
@@ -104,7 +140,7 @@ export default function CollectionPage() {
               <Link href={`/calculators/${entry.calculator_id}`} className="flex-shrink-0">
                 <div className="w-14 h-14 bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden">
                   {entry.calculator?.images[0] ? (
-                    <img src={entry.calculator.images[0]} alt="" className="w-full h-full object-cover" />
+                    <img src={entry.calculator.images[0]} alt="" className="w-full h-full object-contain" />
                   ) : (
                     <span className="text-2xl opacity-20">🧮</span>
                   )}
@@ -119,14 +155,14 @@ export default function CollectionPage() {
                     {entry.calculator?.model ?? entry.calculator_id}
                   </p>
                 </Link>
-                <div className="flex gap-3 mt-1">
+                <div className="flex gap-3 mt-1 flex-wrap">
                   {entry.condition && (
                     <span className="text-[10px] text-zinc-600 font-mono capitalize">{entry.condition}</span>
                   )}
                   {entry.acquired_from && (
                     <span className="text-[10px] text-zinc-600 font-mono">from {entry.acquired_from}</span>
                   )}
-                  {entry.acquired_price && (
+                  {entry.acquired_price != null && (
                     <span className="text-[10px] text-zinc-600 font-mono">${entry.acquired_price}</span>
                   )}
                 </div>
@@ -138,7 +174,7 @@ export default function CollectionPage() {
               {/* Remove */}
               <button
                 onClick={() => remove(entry.id)}
-                className="text-zinc-700 hover:text-red-500 transition-colors font-mono text-xs opacity-0 group-hover:opacity-100"
+                className="text-zinc-700 hover:text-red-500 transition-colors font-mono text-xs opacity-0 group-hover:opacity-100 flex-shrink-0"
               >
                 remove
               </button>

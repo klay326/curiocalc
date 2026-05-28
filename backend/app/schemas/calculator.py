@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class CalculatorBase(BaseModel):
@@ -16,8 +16,23 @@ class CalculatorBase(BaseModel):
     description: str | None = None
     fun_facts: str | None = None
     manual_url: str | None = None
-    external_refs: dict = {}
+    external_refs: list[dict] = []
     tags: list[str] = []
+
+    @field_validator("external_refs", mode="before")
+    @classmethod
+    def coerce_external_refs(cls, v):
+        """Tolerate {} stored as dict instead of [] — treat it as empty list."""
+        if isinstance(v, dict):
+            return list(v.values()) if v else []
+        return v or []
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def coerce_tags(cls, v):
+        if isinstance(v, dict):
+            return []
+        return v or []
     # Variants
     parent_id: uuid.UUID | None = None
     variant_label: str | None = None
@@ -40,7 +55,7 @@ class CalculatorUpdate(BaseModel):
     description: str | None = None
     fun_facts: str | None = None
     tags: list[str] | None = None
-    external_refs: dict | None = None
+    external_refs: list[dict] | None = None
     images: list[str] | None = None
     rarity_score: float | None = None
     weirdness_score: float | None = None

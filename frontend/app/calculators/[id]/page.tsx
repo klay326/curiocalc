@@ -1,10 +1,13 @@
 'use client';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type EditSuggestion } from '@/lib/api';
+import { api, type Calculator, type CollectionEntry, type EditSuggestion, type Comment, type AuthUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { CalculatorCard } from '@/components/calculator-card';
+
+const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
+const DISPLAY_TYPES = ['LCD','LED','VFD','color LCD','nixie tube','CRT','e-paper','thermal paper','mechanical','relay'];
 
 export default function CalculatorPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,9 +19,17 @@ export default function CalculatorPage() {
   const [parentCalc, setParentCalc] = useState<Calculator | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
-  const [addStatus, setAddStatus] = useState<'owned' | 'wanted' | null>(null);
+  const [existingEntry, setExistingEntry] = useState<CollectionEntry | null>(null);
+  const [removingEntry, setRemovingEntry] = useState(false);
   const [adding, setAdding] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
+  const [showAdminEdit, setShowAdminEdit] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [removingImg, setRemovingImg] = useState(false);
+  const [confirmRemoveIdx, setConfirmRemoveIdx] = useState<number | null>(null);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<'owned' | 'wanted'>('owned');
 
   useEffect(() => {
     setLoading(true);
@@ -42,14 +53,51 @@ export default function CalculatorPage() {
       .finally(() => setLoading(false));
   }, [id, router]);
 
-  const addToCollection = async (status: 'owned' | 'wanted') => {
-    if (!user) { router.push('/login'); return; }
-    setAdding(true);
+  // Load the user's existing collection entry for this calc
+  useEffect(() => {
+    if (!user) { setExistingEntry(null); return; }
+    api.collection.mine()
+      .then(entries => {
+        const match = entries.find(e => e.calculator_id === id) ?? null;
+        setExistingEntry(match);
+      })
+      .catch(() => {});
+  }, [id, user]);
+
+  // SEO: update document title when calc loads
+  useEffect(() => {
+    if (calc) {
+      document.title = `${calc.make} ${calc.model} — CurioCalc`;
+    }
+    return () => { document.title = 'CurioCalc'; };
+  }, [calc]);
+
+  const removeImageDirect = async (index: number) => {
+    if (!calc) return;
+    setRemovingImg(true);
     try {
-      await api.collection.add({ calculator_id: id, status });
-      setAddStatus(status);
+      const newImages = calc.images.filter((_, i) => i !== index);
+      const updated = await api.calculators.update(calc.id, { images: newImages } as Partial<Calculator>);
+      setCalc(updated);
+      setActiveImg(prev => Math.min(prev, Math.max(0, updated.images.length - 1)));
     } catch (e) { console.error(e); }
-    finally { setAdding(false); }
+    finally { setRemovingImg(false); }
+  };
+
+  const openCollectionModal = (status: 'owned' | 'wanted') => {
+    if (!user) { router.push('/login'); return; }
+    setPendingStatus(status);
+    setShowCollectionModal(true);
+  };
+
+  const removeFromCollection = async () => {
+    if (!existingEntry) return;
+    setRemovingEntry(true);
+    try {
+      await api.collection.remove(existingEntry.id);
+      setExistingEntry(null);
+    } catch (e) { console.error(e); }
+    finally { setRemovingEntry(false); }
   };
 
   if (loading) return (
@@ -89,7 +137,8 @@ export default function CalculatorPage() {
       <div className="grid md:grid-cols-2 gap-8">
         {/* Image gallery */}
         <div>
-          <div className="aspect-square bg-zinc-900 rounded-xl border border-zinc-800 flex items-center justify-center overflow-hidden mb-2">
+          {/* Main image */}
+          <div className="relative aspect-square bg-zinc-900 rounded-xl border border-zinc-800 flex items-center justify-center overflow-hidden mb-2">
             {calc.images[activeImg] ? (
               <img
                 src={calc.images[activeImg]}
@@ -99,17 +148,70 @@ export default function CalculatorPage() {
             ) : (
               <span className="text-8xl opacity-10 select-none">🧮</span>
             )}
+            {/* Admin: remove button with inline confirmation */}
+            {user?.is_superuser && calc.images[activeImg] && (
+              confirmRemoveIdx === activeImg ? (
+                <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/85 border border-red-800/60 rounded-lg px-2.5 py-1.5">
+                  <span className="text-red-400 font-mono text-xs">Remove?</span>
+                  <button
+                    onClick={() => setConfirmRemoveIdx(null)}
+                    className="text-zinc-400 hover:text-zinc-100 font-mono text-xs px-1.5 py-0.5 rounded border border-zinc-700 hover:border-zinc-500 transition-colors"
+                  >cancel</button>
+                  <button
+                    onClick={() => { setConfirmRemoveIdx(null); removeImageDirect(activeImg); }}
+                    disabled={removingImg}
+                    className="text-white font-mono text-xs px-1.5 py-0.5 rounded bg-red-600 hover:bg-red-500 transition-colors disabled:opacity-40"
+                  >{removingImg ? '…' : 'yes, remove'}</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmRemoveIdx(activeImg)}
+                  title="Remove this image"
+                  className="absolute top-2 right-2 bg-black/70 hover:bg-red-900/80 border border-red-800/60 text-red-400 rounded-lg px-2.5 py-1.5 font-mono text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  🗑 remove image
+                </button>
+              )
+            )}
           </div>
+
+          {/* Thumbnails */}
           {calc.images.length > 1 && (
             <div className="flex gap-2 overflow-x-auto pb-1">
               {calc.images.map((img, i) => (
-                <button key={i} onClick={() => setActiveImg(i)}
-                  className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                    i === activeImg ? 'border-amber-400' : 'border-zinc-800 opacity-60 hover:opacity-100'
-                  }`}
-                >
-                  <img src={img} alt={`view ${i+1}`} className="w-full h-full object-contain bg-zinc-900" />
-                </button>
+                <div key={i} className={`relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                  i === activeImg ? 'border-amber-400' : 'border-zinc-800 opacity-60 hover:opacity-100'
+                }`}>
+                  <button onClick={() => setActiveImg(i)} className="w-full h-full">
+                    <img src={img} alt={`view ${i+1}`} className="w-full h-full object-contain bg-zinc-900" />
+                  </button>
+                  {/* Admin: trashcan on thumbnails with inline confirm */}
+                  {user?.is_superuser && (
+                    confirmRemoveIdx === i ? (
+                      <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-1 p-1">
+                        <span className="text-red-400 font-mono text-[9px]">Remove?</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmRemoveIdx(null); }}
+                            className="text-zinc-300 font-mono text-[9px] px-1.5 py-0.5 bg-zinc-700 rounded"
+                          >no</button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmRemoveIdx(null); removeImageDirect(i); }}
+                            className="text-white font-mono text-[9px] px-1.5 py-0.5 bg-red-600 rounded"
+                          >yes</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setConfirmRemoveIdx(i); }}
+                        title="Remove"
+                        className="absolute top-0.5 right-0.5 bg-black/75 hover:bg-red-900/80 text-red-400 rounded text-[11px] w-5 h-5 flex items-center justify-center transition-colors"
+                      >
+                        🗑
+                      </button>
+                    )
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -145,17 +247,30 @@ export default function CalculatorPage() {
 
           {/* Add to collection */}
           <div className="flex gap-2 mb-5">
-            {addStatus ? (
-              <div className="px-4 py-2.5 bg-amber-400/10 text-amber-400 rounded-lg font-mono text-sm border border-amber-400/20">
-                ✓ Added to {addStatus === 'owned' ? 'collection' : 'wishlist'}
-              </div>
+            {existingEntry ? (
+              <>
+                <div className={`px-4 py-2.5 rounded-lg font-mono text-sm border ${
+                  existingEntry.status === 'owned'
+                    ? 'bg-amber-400/10 text-amber-400 border-amber-400/20'
+                    : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                }`}>
+                  {existingEntry.status === 'owned' ? '🧮 In collection' : '⭐ On wishlist'}
+                </div>
+                <button
+                  onClick={removeFromCollection}
+                  disabled={removingEntry}
+                  className="px-3 py-2.5 bg-zinc-900 text-zinc-500 hover:text-red-400 hover:border-red-900/50 rounded-lg font-mono text-sm border border-zinc-800 transition-colors disabled:opacity-50"
+                  title="Remove from collection">
+                  {removingEntry ? '…' : '✕'}
+                </button>
+              </>
             ) : (
               <>
-                <button onClick={() => addToCollection('owned')} disabled={adding}
+                <button onClick={() => openCollectionModal('owned')} disabled={adding}
                   className="px-4 py-2.5 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
                   I own this
                 </button>
-                <button onClick={() => addToCollection('wanted')} disabled={adding}
+                <button onClick={() => openCollectionModal('wanted')} disabled={adding}
                   className="px-4 py-2.5 bg-zinc-800 text-zinc-100 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors disabled:opacity-50 border border-zinc-700">
                   I want this
                 </button>
@@ -203,20 +318,36 @@ export default function CalculatorPage() {
               className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-colors">
               Wikipedia ↗
             </a>
-            {Object.entries(calc.external_refs).map(([key, url]) =>
-              url ? (
-                <a key={key} href={url} target="_blank" rel="noopener noreferrer"
+            {calc.external_refs.map(ref =>
+              ref.url ? (
+                <a key={ref.label} href={ref.url} target="_blank" rel="noopener noreferrer"
                   className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-colors">
-                  {key.replace(/_/g, ' ')} ↗
+                  {ref.label} ↗
                 </a>
               ) : null
             )}
-            {user && (
+            {user?.is_superuser ? (
+              <>
+                <button
+                  onClick={() => {
+                    setShowAdminEdit(true);
+                    setTimeout(() => document.getElementById('admin-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                  }}
+                  className="text-xs font-mono text-amber-400 hover:text-amber-300 border border-amber-700/50 hover:border-amber-500 bg-amber-900/20 px-3 py-1.5 rounded-lg transition-colors">
+                  ⚙ Edit
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-xs font-mono text-red-400/70 hover:text-red-400 border border-red-900/40 hover:border-red-700/60 bg-red-950/20 px-3 py-1.5 rounded-lg transition-colors">
+                  🗑 Delete
+                </button>
+              </>
+            ) : user ? (
               <button onClick={() => setShowSuggest(true)}
                 className="text-xs font-mono text-amber-500/70 hover:text-amber-400 border border-amber-900/30 hover:border-amber-900/60 px-3 py-1.5 rounded-lg transition-colors">
                 ✏ suggest edit
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -280,9 +411,83 @@ export default function CalculatorPage() {
         </div>
       )}
 
+      {/* Comments */}
+      <CommentsSection calcId={calc.id} currentUser={user} />
+
+      {/* Collection Modal */}
+      {showCollectionModal && calc && (
+        <CollectionModal
+          calcId={calc.id}
+          calcName={`${calc.make} ${calc.model}`}
+          status={pendingStatus}
+          onClose={() => setShowCollectionModal(false)}
+          onSuccess={(entry) => { setExistingEntry(entry); setShowCollectionModal(false); }}
+        />
+      )}
+
       {/* Suggest Edit Modal */}
       {showSuggest && calc && (
         <SuggestEditModal calc={calc} onClose={() => setShowSuggest(false)} />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && calc && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-zinc-900 border border-red-900/60 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-3">🗑</div>
+              <h3 className="font-mono font-bold text-zinc-100 text-lg">Delete this calculator?</h3>
+              <p className="text-zinc-500 font-mono text-xs mt-2">
+                <span className="text-zinc-300">{calc.make} {calc.model}</span> will be permanently removed.<br />
+                This cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-zinc-800 text-zinc-300 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors border border-zinc-700">
+                Cancel
+              </button>
+              <button
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    await api.calculators.delete(calc.id);
+                    router.push('/');
+                  } catch {
+                    setDeleting(false);
+                    setShowDeleteConfirm(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg font-mono text-sm font-bold hover:bg-red-500 transition-colors disabled:opacity-50">
+                {deleting ? 'Deleting…' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin inline edit panel */}
+      {user?.is_superuser && (
+        <div id="admin-panel" className="mt-8 border border-amber-900/40 rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setShowAdminEdit(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-3 bg-amber-900/10 hover:bg-amber-900/20 transition-colors"
+          >
+            <span className="text-xs font-mono text-amber-400 font-bold uppercase tracking-widest">⚙ Admin controls</span>
+            <span className="text-zinc-500 text-xs font-mono">{showAdminEdit ? '▲ collapse' : '▼ expand'}</span>
+          </button>
+          {showAdminEdit && (
+            <AdminEditPanel
+              calc={calc}
+              onSaved={updated => { setCalc(updated); setShowAdminEdit(false); }}
+              onDeleted={() => router.push('/')}
+            />
+          )}
+        </div>
       )}
     </div>
   );
@@ -307,6 +512,693 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
     </div>
   );
 }
+
+// ─── Admin Edit Panel ────────────────────────────────────────────────────────
+
+// These MUST be module-level — if defined inside AdminEditPanel they get
+// recreated on every render, which unmounts the input and kills focus.
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-1">{children}</label>;
+}
+function TextInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors" />
+  );
+}
+
+function AdminEditPanel({
+  calc,
+  onSaved,
+  onDeleted,
+}: {
+  calc: Calculator;
+  onSaved: (updated: Calculator) => void;
+  onDeleted: () => void;
+}) {
+  const [saving, setSaving]       = useState(false);
+  const [deleting, setDeleting]   = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [success, setSuccess]     = useState(false);
+
+  // Editable fields mirroring the Calculator model
+  const [make, setMake]                   = useState(calc.make);
+  const [model, setModel]                 = useState(calc.model);
+  const [variantLabel, setVariantLabel]   = useState(calc.variant_label ?? '');
+  const [calcType, setCalcType]           = useState(calc.calc_type);
+  const [yearIn, setYearIn]               = useState(String(calc.year_introduced ?? ''));
+  const [yearOut, setYearOut]             = useState(String(calc.year_discontinued ?? ''));
+  const [displayType, setDisplayType]     = useState(calc.display_type ?? '');
+  const [power, setPower]                 = useState(calc.power_source ?? '');
+  const [numKeys, setNumKeys]             = useState(String(calc.num_keys ?? ''));
+  const [country, setCountry]             = useState(calc.country_of_origin ?? '');
+  const [description, setDescription]    = useState(calc.description ?? '');
+  const [funFacts, setFunFacts]           = useState(calc.fun_facts ?? '');
+  const [rarity, setRarity]               = useState(String(calc.rarity_score ?? ''));
+  const [weirdness, setWeirdness]         = useState(String(calc.weirdness_score ?? ''));
+  const [tagsRaw, setTagsRaw]             = useState(calc.tags.join(', '));
+  const [isVerified, setIsVerified]       = useState(calc.is_verified ?? false);
+
+  // Images — editable list + file upload
+  const [images, setImages]       = useState<string[]>(calc.images);
+  const [newImgUrl, setNewImgUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const addImage = () => {
+    const u = newImgUrl.trim();
+    if (u && !images.includes(u)) { setImages([...images, u]); }
+    setNewImgUrl('');
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const updated = await api.calculators.uploadImage(calc.id, file);
+      setImages(updated.images);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+  const removeImage = (i: number) => setImages(images.filter((_, idx) => idx !== i));
+  const moveImage   = (i: number, dir: -1 | 1) => {
+    const next = i + dir;
+    if (next < 0 || next >= images.length) return;
+    const arr = [...images];
+    [arr[i], arr[next]] = [arr[next], arr[i]];
+    setImages(arr);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const payload: Record<string, unknown> = {
+        make:               make.trim(),
+        model:              model.trim(),
+        variant_label:      variantLabel.trim() || null,
+        calc_type:          calcType,
+        year_introduced:    yearIn   ? parseInt(yearIn)   : null,
+        year_discontinued:  yearOut  ? parseInt(yearOut)  : null,
+        display_type:       displayType.trim() || null,
+        power_source:       power.trim() || null,
+        num_keys:           numKeys ? parseInt(numKeys) : null,
+        country_of_origin:  country.trim() || null,
+        description:        description.trim() || null,
+        fun_facts:          funFacts.trim() || null,
+        rarity_score:       rarity    ? parseFloat(rarity)    : null,
+        weirdness_score:    weirdness ? parseFloat(weirdness) : null,
+        tags:               tagsRaw.split(',').map(s => s.trim()).filter(Boolean),
+        is_verified:        isVerified,
+        images,
+      };
+      const updated = await api.calculators.update(calc.id, payload as unknown as Partial<Calculator>);
+      setSuccess(true);
+      setTimeout(() => onSaved(updated), 600);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.calculators.delete(calc.id);
+      onDeleted();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+      setDeleting(false);
+      setConfirmDel(false);
+    }
+  };
+
+  return (
+    <div className="px-5 py-5 bg-zinc-950 space-y-6">
+      {error && (
+        <div className="bg-red-950/40 border border-red-800/50 text-red-400 font-mono text-xs px-3 py-2 rounded-lg">{error}</div>
+      )}
+      {success && (
+        <div className="bg-green-950/40 border border-green-800/50 text-green-400 font-mono text-xs px-3 py-2 rounded-lg">✓ Saved successfully</div>
+      )}
+
+      {/* ── Core identity ── */}
+      <section>
+        <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Identity</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FieldLabel>Make</FieldLabel>
+            <TextInput value={make} onChange={setMake} placeholder="HP" />
+          </div>
+          <div>
+            <FieldLabel>Model</FieldLabel>
+            <TextInput value={model} onChange={setModel} placeholder="HP-42S" />
+          </div>
+        </div>
+        <div className="mt-3">
+          <FieldLabel>Variant label (optional)</FieldLabel>
+          <TextInput value={variantLabel} onChange={setVariantLabel} placeholder="Gold edition, etc." />
+        </div>
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          <div>
+            <FieldLabel>Type</FieldLabel>
+            <select value={calcType} onChange={e => setCalcType(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors">
+              {CALC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <FieldLabel>Year introduced</FieldLabel>
+            <TextInput value={yearIn} onChange={setYearIn} placeholder="1982" />
+          </div>
+          <div>
+            <FieldLabel>Year discontinued</FieldLabel>
+            <TextInput value={yearOut} onChange={setYearOut} placeholder="1989" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Hardware specs ── */}
+      <section>
+        <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Hardware</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FieldLabel>Display type</FieldLabel>
+            <select value={displayType} onChange={e => setDisplayType(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors">
+              <option value="">—</option>
+              {DISPLAY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <FieldLabel>Power source</FieldLabel>
+            <TextInput value={power} onChange={setPower} placeholder="Battery / AC" />
+          </div>
+          <div>
+            <FieldLabel>Number of keys</FieldLabel>
+            <TextInput value={numKeys} onChange={setNumKeys} placeholder="35" />
+          </div>
+          <div>
+            <FieldLabel>Country of origin</FieldLabel>
+            <TextInput value={country} onChange={setCountry} placeholder="Japan" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Scores ── */}
+      <section>
+        <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Scores (0–10)</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FieldLabel>Rarity score</FieldLabel>
+            <TextInput value={rarity} onChange={setRarity} placeholder="7.5" />
+          </div>
+          <div>
+            <FieldLabel>Weirdness score</FieldLabel>
+            <TextInput value={weirdness} onChange={setWeirdness} placeholder="4.2" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Tags ── */}
+      <section>
+        <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Tags</p>
+        <FieldLabel>Comma-separated tags</FieldLabel>
+        <TextInput value={tagsRaw} onChange={setTagsRaw} placeholder="rpn, voyager, programmable" />
+        {tagsRaw && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {tagsRaw.split(',').map(t => t.trim()).filter(Boolean).map(t => (
+              <span key={t} className="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono border border-zinc-700">#{t}</span>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Description & fun facts ── */}
+      <section>
+        <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Content</p>
+        <div className="space-y-3">
+          <div>
+            <FieldLabel>Description</FieldLabel>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors resize-y" />
+          </div>
+          <div>
+            <FieldLabel>Fun facts</FieldLabel>
+            <textarea value={funFacts} onChange={e => setFunFacts(e.target.value)} rows={3}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors resize-y" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Images ── */}
+      <section>
+        <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Images</p>
+        <div className="space-y-2 mb-3">
+          {images.length === 0 && (
+            <p className="text-zinc-600 font-mono text-xs italic">No images yet</p>
+          )}
+          {images.map((url, i) => (
+            <div key={i} className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
+              {/* Thumbnail with trashcan hover overlay */}
+              <div className="relative flex-shrink-0 w-10 h-10 group/thumb">
+                <img src={url} alt="" className="w-full h-full object-contain bg-zinc-800 rounded" />
+                <button
+                  onClick={() => removeImage(i)}
+                  className="absolute inset-0 bg-black/70 rounded flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity text-red-400 text-base"
+                  title="Remove image"
+                >
+                  🗑
+                </button>
+              </div>
+              <span className="flex-1 min-w-0 font-mono text-[10px] text-zinc-500 truncate">{url}</span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => moveImage(i, -1)} disabled={i === 0}
+                  className="text-zinc-600 hover:text-zinc-300 disabled:opacity-20 transition-colors px-1 font-mono text-xs">▲</button>
+                <button onClick={() => moveImage(i, 1)} disabled={i === images.length - 1}
+                  className="text-zinc-600 hover:text-zinc-300 disabled:opacity-20 transition-colors px-1 font-mono text-xs">▼</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* URL input row */}
+        <div className="flex gap-2 mb-2">
+          <input
+            value={newImgUrl}
+            onChange={e => setNewImgUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addImage(); } }}
+            placeholder="Paste image URL and press Enter or Add…"
+            className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-xs focus:outline-none focus:border-amber-400 transition-colors"
+          />
+          <button onClick={addImage}
+            className="px-3 py-2 bg-zinc-800 text-zinc-300 rounded-lg font-mono text-xs hover:bg-zinc-700 border border-zinc-700 transition-colors">
+            Add URL
+          </button>
+        </div>
+        {/* File upload row */}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-zinc-900 border border-dashed border-zinc-600 hover:border-amber-400/50 text-zinc-500 hover:text-zinc-300 rounded-lg font-mono text-xs transition-colors disabled:opacity-50 group">
+            {uploading ? (
+              <><span className="animate-spin">⟳</span> Uploading…</>
+            ) : (
+              <><span className="text-base">📁</span> Upload from computer</>
+            )}
+          </button>
+          {uploading && (
+            <p className="text-[10px] text-zinc-600 font-mono mt-1 text-center">Uploading image, please wait…</p>
+          )}
+        </div>
+      </section>
+
+      {/* ── Flags ── */}
+      <section>
+        <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Flags</p>
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <div onClick={() => setIsVerified(v => !v)}
+            className={`w-10 h-5 rounded-full transition-colors relative ${isVerified ? 'bg-amber-400' : 'bg-zinc-700'}`}>
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${isVerified ? 'left-5' : 'left-0.5'}`} />
+          </div>
+          <span className="text-sm font-mono text-zinc-300 group-hover:text-zinc-100 transition-colors">
+            Verified
+            <span className="ml-2 text-[10px] text-zinc-600">(shows gold badge on detail page)</span>
+          </span>
+        </label>
+      </section>
+
+      {/* ── Actions ── */}
+      <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+        <div>
+          {!confirmDel ? (
+            <button onClick={() => setConfirmDel(true)}
+              className="text-xs font-mono text-red-500/60 hover:text-red-400 transition-colors border border-red-900/30 hover:border-red-700/50 px-3 py-2 rounded-lg">
+              🗑 Delete calculator
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-red-400">Are you sure?</span>
+              <button onClick={handleDelete} disabled={deleting}
+                className="text-xs font-mono bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-500 transition-colors disabled:opacity-50">
+                {deleting ? 'Deleting…' : 'Yes, delete'}
+              </button>
+              <button onClick={() => setConfirmDel(false)}
+                className="text-xs font-mono text-zinc-500 hover:text-zinc-300 px-3 py-1.5 rounded-lg transition-colors">
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+        <button onClick={handleSave} disabled={saving}
+          className="px-5 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
+          {saving ? 'Saving…' : '✓ Save changes'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Comments Section ────────────────────────────────────────────────────────
+
+function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [hovered, setHovered] = useState(0);
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map(n => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(value === n ? 0 : n)}
+          onMouseEnter={() => setHovered(n)}
+          onMouseLeave={() => setHovered(0)}
+          className="text-lg transition-colors leading-none"
+        >
+          <span className={(hovered || value) >= n ? 'text-amber-400' : 'text-zinc-700'}>★</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser: AuthUser | null }) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [content, setContent] = useState('');
+  const [rating, setRating] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.comments.list(calcId)
+      .then(setComments)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [calcId]);
+
+  const handleSubmit = async () => {
+    if (!content.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const newComment = await api.comments.create(calcId, {
+        content: content.trim(),
+        rating: rating || null,
+      });
+      setComments(prev => [newComment, ...prev]);
+      setContent('');
+      setRating(0);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to post');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (commentId: string) => {
+    try {
+      await api.comments.delete(commentId);
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } catch {}
+  };
+
+  const avgRating = comments.filter(c => c.rating).length > 0
+    ? (comments.reduce((sum, c) => sum + (c.rating ?? 0), 0) / comments.filter(c => c.rating).length).toFixed(1)
+    : null;
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-baseline gap-3 mb-4">
+        <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+          Community reviews
+        </h2>
+        {avgRating && (
+          <span className="text-amber-400 font-mono text-sm font-bold">
+            ★ {avgRating}
+            <span className="text-zinc-600 text-[10px] ml-1">({comments.filter(c => c.rating).length} rated)</span>
+          </span>
+        )}
+        <span className="text-zinc-700 font-mono text-[10px]">({comments.length})</span>
+      </div>
+
+      {/* Write a comment */}
+      {currentUser ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-7 h-7 rounded-full bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+              {currentUser.avatar_url ? (
+                <img src={currentUser.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-amber-400 font-mono">
+                  {(currentUser.display_name ?? currentUser.username).charAt(0).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <span className="text-xs font-mono text-zinc-500">@{currentUser.username}</span>
+            <StarRating value={rating} onChange={setRating} />
+            {rating > 0 && (
+              <span className="text-[10px] font-mono text-zinc-600">{rating}/5</span>
+            )}
+          </div>
+          <textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            placeholder="Share your experience with this calculator…"
+            rows={3}
+            maxLength={2000}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-200 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors resize-none"
+          />
+          {error && <p className="text-red-400 font-mono text-xs mt-2">{error}</p>}
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-[10px] text-zinc-700 font-mono">{content.length}/2000</span>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !content.trim()}
+              className="px-4 py-1.5 bg-amber-400 text-zinc-950 rounded-lg font-mono text-xs font-bold hover:bg-amber-300 transition-colors disabled:opacity-40"
+            >
+              {submitting ? 'Posting…' : 'Post review'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-5 text-center">
+          <p className="text-zinc-600 font-mono text-xs">
+            <a href="/login" className="text-amber-400 hover:text-amber-300">Sign in</a> to leave a review
+          </p>
+        </div>
+      )}
+
+      {/* Comment list */}
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2].map(i => <div key={i} className="h-16 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />)}
+        </div>
+      ) : comments.length === 0 ? (
+        <p className="text-zinc-700 font-mono text-sm italic text-center py-6">No reviews yet — be the first!</p>
+      ) : (
+        <div className="space-y-3">
+          {comments.map(c => (
+            <div key={c.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 group">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 rounded-full bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] font-bold text-amber-400 font-mono">
+                    {(c.display_name ?? c.username).charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-zinc-400">{c.display_name ?? `@${c.username}`}</span>
+                {c.rating && (
+                  <span className="text-amber-400 text-xs font-mono">{'★'.repeat(c.rating)}{'☆'.repeat(5 - c.rating)}</span>
+                )}
+                <span className="text-[10px] text-zinc-700 font-mono ml-auto">
+                  {new Date(c.created_at).toLocaleDateString()}
+                </span>
+                {(currentUser?.id === c.user_id || currentUser?.is_superuser) && (
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    className="text-[10px] font-mono text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    delete
+                  </button>
+                )}
+              </div>
+              <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line">{c.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Collection Modal ────────────────────────────────────────────────────────
+
+function CollectionModal({
+  calcId,
+  calcName,
+  status,
+  onClose,
+  onSuccess,
+}: {
+  calcId: string;
+  calcName: string;
+  status: 'owned' | 'wanted';
+  onClose: () => void;
+  onSuccess: (entry: CollectionEntry) => void;
+}) {
+  const [condition, setCondition] = useState('');
+  const [notes, setNotes] = useState('');
+  const [acquiredFrom, setAcquiredFrom] = useState('');
+  const [price, setPrice] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAdd = async () => {
+    setAdding(true);
+    setError(null);
+    try {
+      const entry = await api.collection.add({
+        calculator_id: calcId,
+        status,
+        condition: condition || null,
+        notes: notes.trim() || null,
+        acquired_from: acquiredFrom.trim() || null,
+        acquired_price: price ? parseFloat(price) : null,
+      });
+      onSuccess(entry);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to add');
+      setAdding(false);
+    }
+  };
+
+  const isOwned = status === 'owned';
+  const CONDITIONS = ['mint', 'excellent', 'good', 'fair', 'poor'] as const;
+
+  return (
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-mono font-bold text-zinc-100">
+              {isOwned ? '🧮 Add to collection' : '⭐ Add to wishlist'}
+            </h3>
+            <p className="text-zinc-600 font-mono text-xs mt-0.5">{calcName}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 transition-colors text-xl leading-none">✕</button>
+        </div>
+
+        {error && (
+          <p className="text-red-400 font-mono text-xs mb-3 bg-red-900/20 border border-red-900/30 px-3 py-2 rounded-lg">{error}</p>
+        )}
+
+        {/* Condition — only for owned */}
+        {isOwned && (
+          <div className="mb-4">
+            <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-2">
+              Condition <span className="text-zinc-700 normal-case">(optional)</span>
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {CONDITIONS.map(c => (
+                <button key={c}
+                  onClick={() => setCondition(condition === c ? '' : c)}
+                  className={`px-3 py-1.5 rounded-lg font-mono text-xs border transition-colors ${
+                    condition === c
+                      ? 'bg-amber-400/20 text-amber-400 border-amber-600/60'
+                      : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+                  }`}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Notes */}
+        <div className="mb-4">
+          <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-1.5">
+            {isOwned ? 'Notes' : 'Why do you want this?'} <span className="text-zinc-700 normal-case">(optional)</span>
+          </label>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder={isOwned ? 'Box included, working condition…' : 'Dream piece, great for RPN…'}
+            rows={2}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-200 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors resize-none"
+          />
+        </div>
+
+        {/* Owned-only: price + source */}
+        {isOwned && (
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-1.5">
+                Price paid <span className="text-zinc-700 normal-case">($, optional)</span>
+              </label>
+              <input
+                type="number"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                placeholder="25.00"
+                min="0"
+                step="0.01"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-200 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-1.5">
+                Acquired from <span className="text-zinc-700 normal-case">(optional)</span>
+              </label>
+              <input
+                value={acquiredFrom}
+                onChange={e => setAcquiredFrom(e.target.value)}
+                placeholder="eBay, estate sale…"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-200 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button onClick={onClose}
+            className="flex-1 px-4 py-2.5 bg-zinc-800 text-zinc-400 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors border border-zinc-700">
+            cancel
+          </button>
+          <button
+            onClick={handleAdd}
+            disabled={adding}
+            className={`flex-1 px-4 py-2.5 rounded-lg font-mono text-sm font-bold transition-colors disabled:opacity-50 ${
+              isOwned
+                ? 'bg-amber-400 text-zinc-950 hover:bg-amber-300'
+                : 'bg-zinc-700 text-zinc-100 hover:bg-zinc-600 border border-zinc-600'
+            }`}>
+            {adding ? 'Adding…' : isOwned ? '✓ Add to collection' : '⭐ Add to wishlist'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Suggest Edit Modal ────────────────────────────────────────────────────────
 
 function SuggestEditModal({ calc, onClose }: { calc: Calculator; onClose: () => void }) {
   const [field, setField] = useState('description');

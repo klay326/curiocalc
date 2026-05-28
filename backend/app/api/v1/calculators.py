@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, distinct
+from sqlalchemy import select, func, or_, distinct, text
 import uuid
 
 from app.api.deps import get_db, get_current_user, get_current_superuser
@@ -9,6 +9,7 @@ from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.schemas.calculator import CalculatorCreate, CalculatorUpdate, CalculatorPublic
 from app.services.storage import upload_image
+from app.services.email import notify_calc_added, notify_calc_updated, notify_calc_deleted
 
 router = APIRouter(prefix="/calculators", tags=["calculators"])
 
@@ -49,7 +50,7 @@ async def list_calculators(
     order: str = Query("asc", description="asc | desc"),
     include_variants: bool = Query(False, description="Include variant/colorway entries (default: hide them)"),
     skip: int = 0,
-    limit: int = Query(40, le=200),
+    limit: int = Query(40, le=500),
 ):
     stmt = select(Calculator)
 
@@ -62,6 +63,9 @@ async def list_calculators(
             Calculator.make.ilike(f"%{q}%"),
             Calculator.model.ilike(f"%{q}%"),
             Calculator.description.ilike(f"%{q}%"),
+            Calculator.tags.cast(text("text")).ilike(f"%{q}%"),
+            Calculator.display_type.ilike(f"%{q}%"),
+            Calculator.country_of_origin.ilike(f"%{q}%"),
         ))
     if calc_type:
         stmt = stmt.where(Calculator.calc_type == calc_type)
@@ -126,6 +130,55 @@ async def list_calculators(
     return out
 
 
+@router.get("/random", response_model=CalculatorPublic)
+async def get_random(db: AsyncSession = Depends(get_db)):
+    """Return a random calculator (parent models only)."""
+    result = await db.execute(
+        select(Calculator)
+        .where(Calculator.parent_id.is_(None))
+        .order_by(func.random())
+        .limit(1)
+    )
+    calc = result.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="No calculators found")
+    return await _with_counts(db, calc)
+
+
+@router.get("/brands", response_model=list[dict])
+async def list_brands(db: AsyncSession = Depends(get_db)):
+    """Return all brands with calc counts and a sample image."""
+    rows = await db.execute(
+        select(
+            Calculator.make,
+            func.count(Calculator.id).label("count"),
+        )
+        .where(Calculator.parent_id.is_(None))
+        .group_by(Calculator.make)
+        .order_by(func.count(Calculator.id).desc())
+    )
+    brands = []
+    for row in rows:
+        # Grab first calc with an image for brand thumbnail
+        img_r = await db.execute(
+            select(Calculator.images, Calculator.model)
+            .where(
+                Calculator.make == row.make,
+                func.json_array_length(Calculator.images) > 0,
+            )
+            .order_by(Calculator.rarity_score.desc().nulls_last())
+            .limit(1)
+        )
+        img_row = img_r.first()
+        brands.append({
+            "make": row.make,
+            "count": row.count,
+            "image": img_row.images[0] if img_row and img_row.images else None,
+            "flagship": img_row.model if img_row else None,
+        })
+    return brands
+
+
 @router.get("/makes", response_model=list[str])
 async def list_makes(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(distinct(Calculator.make)).order_by(Calculator.make))
@@ -163,7 +216,7 @@ async def get_related(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     related = result.scalars().all()
     return [
         CalculatorPublic.model_validate(
-            {c.key: getattr(r, c.key) for c in r.__table__.columns} | {"owner_count": 0, "want_count": 0}
+            {c.key: getattr(r, c.key) for c in r.__table__.columns} | {"owner_count": 0, "want_count": 0, "variant_count": 0}
         )
         for r in related
     ]
@@ -197,6 +250,7 @@ async def create_calculator(
     db.add(calc)
     await db.commit()
     await db.refresh(calc)
+    await notify_calc_added(calc.make, calc.model, str(calc.id), current_user.username)
     return await _with_counts(db, calc)
 
 
@@ -226,6 +280,7 @@ async def update_calculator(
 
     await db.commit()
     await db.refresh(calc)
+    await notify_calc_updated(calc.make, calc.model, str(calc.id), current_user.username)
     return await _with_counts(db, calc)
 
 
@@ -239,8 +294,10 @@ async def delete_calculator(
     calc = result.scalar_one_or_none()
     if not calc:
         raise HTTPException(status_code=404, detail="Calculator not found")
+    make, model = calc.make, calc.model
     await db.delete(calc)
     await db.commit()
+    await notify_calc_deleted(make, model, current_user.username)
 
 
 @router.post("/{calc_id}/images", response_model=CalculatorPublic)

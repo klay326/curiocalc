@@ -1,31 +1,19 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ─── Base ─────────────────────────────────────────────────────── */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: #09090b;
-  color: var(--foreground);
+  background-color: var(--color-zinc-950);
+  color: var(--color-zinc-100);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s, color 0.2s;
 }
 
-/* Shared form utility classes */
+/* ─── Shared form utilities ─────────────────────────────────────── */
 .label {
   @apply text-[10px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5;
 }
@@ -34,4 +22,160 @@ body {
 }
 .select {
   @apply w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors;
+}
+
+/* scrollbar utility */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   THEMES — override Tailwind v4 CSS custom properties per data-theme
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Crimson — pure black + pure bright red (default) ─────────── */
+:root, [data-theme="crimson"] {
+  color-scheme: dark;
+
+  /* Near-pure blacks — only the faintest red whisper */
+  --color-zinc-950: #020000;
+  --color-zinc-900: #080000;
+  --color-zinc-800: #110000;
+  --color-zinc-700: #1c0000;
+  --color-zinc-600: #2e0000;
+  --color-zinc-500: #4a0000;
+  --color-zinc-400: #700000;
+  --color-zinc-300: #a00000;
+  --color-zinc-200: #cc2020;
+  --color-zinc-100: #f0b0b0;
+
+  /* Pure vivid red accent */
+  --color-amber-400: #ff0000;
+  --color-amber-300: #ff4040;
+  --color-amber-900: #110000;
+
+  --color-pink-950: #080000;
+  --color-pink-900: #110000;
+  --color-pink-500: #ff0000;
+}
+
+/* ── 2. Obsidian — charcoal dark + electric amber gold ──────────── */
+[data-theme="obsidian"] {
+  color-scheme: dark;
+
+  --color-zinc-950: #0a0a0a;
+  --color-zinc-900: #141414;
+  --color-zinc-800: #1f1f1f;
+  --color-zinc-700: #2e2e2e;
+  --color-zinc-600: #484848;
+  --color-zinc-500: #666666;
+  --color-zinc-400: #8a8a8a;
+  --color-zinc-300: #aaaaaa;
+  --color-zinc-200: #d0d0d0;
+  --color-zinc-100: #f0f0f0;
+
+  --color-amber-400: #f59e0b;
+  --color-amber-300: #fbbf24;
+  --color-amber-900: #1a1200;
+
+  --color-pink-950: #130e00;
+  --color-pink-900: #1f1600;
+  --color-pink-500: #f59e0b;
+}
+
+/* ── 3. Terminal — phosphor green on pure black ──────────────────── */
+[data-theme="terminal"] {
+  color-scheme: dark;
+
+  --color-zinc-950: #000400;
+  --color-zinc-900: #000d00;
+  --color-zinc-800: #001800;
+  --color-zinc-700: #002400;
+  --color-zinc-600: #003a00;
+  --color-zinc-500: #005800;
+  --color-zinc-400: #008000;
+  --color-zinc-300: #00b800;
+  --color-zinc-200: #00d800;
+  --color-zinc-100: #80f080;
+
+  --color-amber-400: #39ff14;
+  --color-amber-300: #5fff3a;
+  --color-amber-900: #001800;
+
+  --color-pink-950: #000d00;
+  --color-pink-900: #001800;
+  --color-pink-500: #39ff14;
+}
+
+/* ── 4. Ocean — deep navy + electric sky blue ───────────────────── */
+[data-theme="ocean"] {
+  color-scheme: dark;
+
+  --color-zinc-950: #010810;
+  --color-zinc-900: #04101e;
+  --color-zinc-800: #081828;
+  --color-zinc-700: #0e2238;
+  --color-zinc-600: #163050;
+  --color-zinc-500: #1e4068;
+  --color-zinc-400: #3a6890;
+  --color-zinc-300: #5c90b8;
+  --color-zinc-200: #90bad8;
+  --color-zinc-100: #cce4f4;
+
+  --color-amber-400: #38bdf8;
+  --color-amber-300: #7dd3fc;
+  --color-amber-900: #081828;
+
+  --color-pink-950: #040e20;
+  --color-pink-900: #081828;
+  --color-pink-500: #38bdf8;
+}
+
+/* ── 5. Ember — dark warm + deep orange glow ────────────────────── */
+[data-theme="ember"] {
+  color-scheme: dark;
+
+  --color-zinc-950: #0c0500;
+  --color-zinc-900: #180c00;
+  --color-zinc-800: #271600;
+  --color-zinc-700: #382200;
+  --color-zinc-600: #563400;
+  --color-zinc-500: #744a00;
+  --color-zinc-400: #a06820;
+  --color-zinc-300: #c08840;
+  --color-zinc-200: #dcac70;
+  --color-zinc-100: #f4d8a8;
+
+  --color-amber-400: #f97316;
+  --color-amber-300: #fb923c;
+  --color-amber-900: #271600;
+
+  --color-pink-950: #180800;
+  --color-pink-900: #271200;
+  --color-pink-500: #f97316;
+}
+
+/* ── 6. Paper — clean warm light mode ───────────────────────────── */
+[data-theme="paper"] {
+  color-scheme: light;
+
+  --color-zinc-950: #fdf8f0;
+  --color-zinc-900: #f5ede0;
+  --color-zinc-800: #e8ddd0;
+  --color-zinc-700: #d4c8b8;
+  --color-zinc-600: #a89880;
+  --color-zinc-500: #786858;
+  --color-zinc-400: #504438;
+  --color-zinc-300: #383028;
+  --color-zinc-200: #201c18;
+  --color-zinc-100: #0e0c0a;
+
+  --color-amber-400: #c2410c;
+  --color-amber-300: #9a3412;
+  --color-amber-900: #fde8d8;
+
+  --color-pink-950: #fdf2e8;
+  --color-pink-900: #fae0cc;
+  --color-pink-500: #c2410c;
 }

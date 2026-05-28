@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
+from typing import Any
 
 from app.api.deps import get_db, get_current_user
 from app.models.user import User
+from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.schemas.collection import CollectionEntryCreate, CollectionEntryUpdate, CollectionEntryPublic
 from app.services.storage import upload_image
@@ -104,3 +106,39 @@ async def upload_entry_photo(
     await db.commit()
     await db.refresh(entry)
     return entry
+
+
+@router.get("/for-sale", response_model=list[dict[str, Any]])
+async def get_for_sale_listings(db: AsyncSession = Depends(get_db)):
+    """All public for-sale listings with basic calculator + seller info."""
+    result = await db.execute(
+        select(CollectionEntry, User, Calculator)
+        .join(User, User.id == CollectionEntry.user_id)
+        .join(Calculator, Calculator.id == CollectionEntry.calculator_id)
+        .where(
+            CollectionEntry.status == "for_sale",
+            CollectionEntry.visibility == "public",
+        )
+        .order_by(CollectionEntry.created_at.desc())
+        .limit(100)
+    )
+    rows = result.all()
+    out = []
+    for entry, user, calc in rows:
+        out.append({
+            "entry_id": str(entry.id),
+            "calculator_id": str(calc.id),
+            "make": calc.make,
+            "model": calc.model,
+            "images": calc.images,
+            "calc_type": calc.calc_type,
+            "year_introduced": calc.year_introduced,
+            "condition": entry.condition,
+            "notes": entry.notes,
+            "acquired_price": entry.acquired_price,
+            "seller_username": user.username,
+            "seller_display_name": user.display_name,
+            "seller_avatar": user.avatar_url,
+            "listed_at": entry.created_at.isoformat(),
+        })
+    return out

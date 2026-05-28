@@ -38,5 +38,13 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_EMAIL: str = "admin@curiocalc.org"
     FIRST_SUPERUSER_PASSWORD: str = "changeme"
 
+    # Email notifications
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    NOTIFICATION_EMAIL: str = "klay.adams326@gmail.com"
+
 
 settings = Settings()

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
+import { ThemeProvider } from '@/lib/theme';
 import { Nav } from '@/components/nav';
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
@@ -12,14 +13,31 @@ export const metadata: Metadata = {
   description: 'Browse, catalog, and share your calculator collection. From everyday scientific models to the bizarre and obscure.',
 };
 
+// Inline script runs before React hydrates — prevents flash of wrong theme
+const themeScript = `
+(function(){
+  try {
+    var t = localStorage.getItem('cc-theme') || 'crimson';
+    var valid = ['crimson','obsidian','terminal','ocean','ember','paper'];
+    document.documentElement.setAttribute('data-theme', valid.includes(t) ? t : 'crimson');
+  } catch(e){}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="crimson" suppressHydrationWarning>
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100 min-h-screen`}>
-        <AuthProvider>
-          <Nav />
-          <main>{children}</main>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <Nav />
+            <main>{children}</main>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

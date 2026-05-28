@@ -18,7 +18,7 @@ export type Calculator = {
   weirdness_score: number | null;
   is_verified: boolean;
   tags: string[];
-  external_refs: Record<string, string>;
+  external_refs: Array<{ label: string; url: string }>;
   owner_count: number;
   want_count: number;
   variant_count: number;
@@ -34,8 +34,12 @@ export type AuthUser = {
   email: string;
   display_name: string | null;
   avatar_url: string | null;
+  bio: string | null;
+  location: string | null;
+  website: string | null;
   is_verified: boolean;
   is_superuser: boolean;
+  api_key: string | null;
 };
 
 export type UserProfile = {
@@ -49,6 +53,23 @@ export type UserProfile = {
   created_at: string;
   owned_count: number;
   wanted_count: number;
+  follower_count: number;
+  following_count: number;
+};
+
+export type LeaderboardEntry = {
+  rank: number;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  owned_count: number;
+  brand_count: number;
+};
+
+export type FollowUser = {
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
 };
 
 export type CollectionEntry = {
@@ -64,6 +85,88 @@ export type CollectionEntry = {
   acquired_from: string | null;
   photos: string[];
   created_at: string;
+};
+
+export type SiteStats = {
+  total_calcs: number;
+  total_brands: number;
+  total_users: number;
+  total_owned: number;
+  with_images: number;
+  with_descriptions: number;
+  top_brands: Array<{ make: string; count: number }>;
+  decades: Array<{ decade: number; count: number }>;
+  recent: Calculator[];
+};
+
+export type BrandSummary = {
+  make: string;
+  count: number;
+  image: string | null;
+  flagship: string | null;
+};
+
+export type AdminStats = {
+  users: {
+    total: number;
+    new_today: number;
+    new_this_week: number;
+    new_this_month: number;
+    recent: Array<{
+      id: string;
+      username: string;
+      email: string;
+      created_at: string;
+      is_superuser: boolean;
+    }>;
+  };
+  calculators: {
+    total: number;
+    added_this_week: number;
+    added_this_month: number;
+    recent_additions: Array<{ id: string; make: string; model: string; created_at: string }>;
+    by_type: Array<{ type: string; count: number }>;
+  };
+  collections: {
+    total_entries: number;
+    new_this_week: number;
+    top_collectors: Array<{ username: string; display_name: string | null; owned: number }>;
+    most_collected: Array<{ id: string; make: string; model: string; total: number }>;
+  };
+};
+
+export type Comment = {
+  id: string;
+  calculator_id: string;
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  content: string;
+  rating: number | null;
+  created_at: string;
+};
+
+export type TrendingCalcs = {
+  trending_owned: Calculator[];
+  trending_wanted: Calculator[];
+  new_this_week: Calculator[];
+};
+
+export type ForSaleListing = {
+  entry_id: string;
+  calculator_id: string;
+  make: string;
+  model: string;
+  images: string[];
+  calc_type: string;
+  year_introduced: number | null;
+  condition: string | null;
+  notes: string | null;
+  acquired_price: number | null;
+  seller_username: string;
+  seller_display_name: string | null;
+  seller_avatar: string | null;
+  listed_at: string;
 };
 
 export type EditSuggestion = {
@@ -150,19 +253,46 @@ export const api = {
     related: (id: string) => request<Calculator[]>(`/api/v1/calculators/related/${id}`),
     makes: () => request<string[]>('/api/v1/calculators/makes'),
     tags: () => request<string[]>('/api/v1/calculators/tags'),
+    random: () => request<Calculator>('/api/v1/calculators/random'),
+    brands: () => request<BrandSummary[]>('/api/v1/calculators/brands'),
+    needsWork: (limit = 24) => request<Calculator[]>(`/api/v1/calculators/needs-work?limit=${limit}`),
+    ownersAlsoOwn: (id: string) => request<Calculator[]>(`/api/v1/calculators/${id}/owners-also-own`),
     create: (data: Partial<Calculator>) =>
       request<Calculator>('/api/v1/calculators', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<Calculator>) =>
       request<Calculator>(`/api/v1/calculators/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<void>(`/api/v1/calculators/${id}`, { method: 'DELETE' }),
+    uploadImage: async (id: string, file: File): Promise<Calculator> => {
+      const token = getToken();
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API_URL}/api/v1/calculators/${id}/images`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Upload failed');
+      }
+      return res.json();
+    },
   },
 
   collection: {
     mine: () => request<CollectionEntry[]>('/api/v1/collections/me'),
     forUser: (username: string) =>
       request<CollectionEntry[]>(`/api/v1/collections/users/${username}`),
-    add: (data: { calculator_id: string; status: string; condition?: string; notes?: string }) =>
+    add: (data: {
+      calculator_id: string;
+      status: string;
+      condition?: string | null;
+      notes?: string | null;
+      acquired_from?: string | null;
+      acquired_price?: number | null;
+      acquired_date?: string | null;
+    }) =>
       request<CollectionEntry>('/api/v1/collections', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<CollectionEntry>) =>
       request<CollectionEntry>(`/api/v1/collections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -171,6 +301,43 @@ export const api = {
 
   users: {
     get: (username: string) => request<UserProfile>(`/api/v1/users/${username}`),
+    updateMe: (data: {
+      display_name?: string | null;
+      bio?: string | null;
+      location?: string | null;
+      website?: string | null;
+      avatar_url?: string | null;
+    }) => request<AuthUser>('/api/v1/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+    leaderboard: () => request<LeaderboardEntry[]>('/api/v1/users/leaderboard'),
+    follow: (username: string) =>
+      request<{ status: string }>(`/api/v1/users/${username}/follow`, { method: 'POST' }),
+    unfollow: (username: string) =>
+      request<{ status: string }>(`/api/v1/users/${username}/follow`, { method: 'DELETE' }),
+    followers: (username: string) => request<FollowUser[]>(`/api/v1/users/${username}/followers`),
+    following: (username: string) => request<FollowUser[]>(`/api/v1/users/${username}/following`),
+    generateApiKey: () =>
+      request<AuthUser>('/api/v1/users/me/api-key', { method: 'POST' }),
+  },
+
+  stats: {
+    get: () => request<SiteStats>('/api/v1/stats'),
+    trending: () => request<TrendingCalcs>('/api/v1/stats/trending'),
+  },
+
+  admin: {
+    stats: () => request<AdminStats>('/api/v1/admin/stats'),
+  },
+
+  comments: {
+    list: (calcId: string) => request<Comment[]>(`/api/v1/calculators/${calcId}/comments`),
+    create: (calcId: string, data: { content: string; rating?: number | null }) =>
+      request<Comment>(`/api/v1/calculators/${calcId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
+    delete: (commentId: string) =>
+      request<void>(`/api/v1/comments/${commentId}`, { method: 'DELETE' }),
+  },
+
+  trade: {
+    listings: () => request<ForSaleListing[]>('/api/v1/collections/for-sale'),
   },
 
   suggestions: {

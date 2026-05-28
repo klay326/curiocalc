@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type EditSuggestion } from '@/lib/api';
+import { api, type Calculator, type EditSuggestion, type AdminStats } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'calcs' | 'suggestions'>('calcs');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
-        {(['calcs', 'suggestions'] as const).map(t => (
+        {(['stats', 'calcs', 'suggestions'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -45,7 +45,199 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 'calcs' ? <CalcsTab /> : <SuggestionsTab />}
+      {tab === 'stats' ? <StatsTab /> : tab === 'calcs' ? <CalcsTab /> : <SuggestionsTab />}
+    </div>
+  );
+}
+
+/* ────────────────────────────────── Stats tab ── */
+function StatsTab() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.admin.stats()
+      .then(setStats)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-zinc-600 font-mono text-sm animate-pulse py-8">Loading stats…</div>;
+  if (error)   return <div className="text-red-400 font-mono text-sm py-4">Error: {error}</div>;
+  if (!stats)  return null;
+
+  const { users, calculators, collections } = stats;
+  const total = calculators.total || 1;
+
+  return (
+    <div className="space-y-8">
+      {/* User Stats */}
+      <section>
+        <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-2">👥 Users</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          {[
+            { label: 'Total',      value: users.total },
+            { label: 'New Today',  value: users.new_today },
+            { label: 'This Week',  value: users.new_this_week },
+            { label: 'This Month', value: users.new_this_month },
+          ].map(s => (
+            <div key={s.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+              <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-1">{s.label}</p>
+              <p className="text-2xl font-bold font-mono text-amber-400">{s.value.toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Recent signups */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 bg-zinc-800/40 border-b border-zinc-800">
+            <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Recent Signups</p>
+          </div>
+          <div className="divide-y divide-zinc-800/60">
+            {users.recent.map(u => (
+              <div key={u.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/30">
+                <div className="flex items-center gap-2">
+                  <Link href={`/u/${u.username}`} className="font-mono text-sm text-zinc-300 hover:text-amber-400 transition-colors">
+                    @{u.username}
+                  </Link>
+                  {u.is_superuser && (
+                    <span className="text-[9px] bg-amber-900/30 text-amber-400 border border-amber-900/40 px-1.5 py-0.5 rounded font-mono">admin</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-zinc-600 font-mono text-xs hidden md:block">{u.email}</span>
+                  <span className="text-zinc-600 font-mono text-[10px]">
+                    {new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {users.recent.length === 0 && <p className="px-4 py-4 text-zinc-600 font-mono text-xs">No users yet</p>}
+          </div>
+        </div>
+      </section>
+
+      {/* Calculator Stats */}
+      <section>
+        <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-2">🧮 Calculators</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          {[
+            { label: 'Total',       value: calculators.total },
+            { label: 'Added/Week',  value: calculators.added_this_week },
+            { label: 'Added/Month', value: calculators.added_this_month },
+            { label: 'Collection Entries', value: collections.total_entries },
+          ].map(s => (
+            <div key={s.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+              <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-1">{s.label}</p>
+              <p className="text-2xl font-bold font-mono text-amber-400">{s.value.toLocaleString()}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          {/* Type breakdown */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-800/40 border-b border-zinc-800">
+              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">By Type</p>
+            </div>
+            <div className="p-4 space-y-2">
+              {calculators.by_type.map(t => {
+                const pct = Math.round((t.count / total) * 100);
+                return (
+                  <div key={t.type}>
+                    <div className="flex justify-between text-[10px] font-mono mb-0.5">
+                      <span className="text-zinc-400 capitalize">{t.type}</span>
+                      <span className="text-zinc-600">{t.count.toLocaleString()} ({pct}%)</span>
+                    </div>
+                    <div className="h-1.5 bg-zinc-800 rounded-full">
+                      <div className="h-full bg-amber-400/50 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Recent additions */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-800/40 border-b border-zinc-800">
+              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Recently Added</p>
+            </div>
+            <div className="divide-y divide-zinc-800/60">
+              {calculators.recent_additions.map(c => (
+                <div key={c.id} className="flex items-center justify-between px-4 py-2 hover:bg-zinc-800/30">
+                  <Link href={`/calculators/${c.id}`} className="font-mono text-sm text-zinc-300 hover:text-amber-400 transition-colors">
+                    {c.make} {c.model}
+                  </Link>
+                  <span className="text-zinc-600 font-mono text-[10px]">
+                    {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Collection Stats */}
+      <section>
+        <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-2">📦 Collections</h2>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {/* Top collectors */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-800/40 border-b border-zinc-800">
+              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">🏆 Top Collectors</p>
+            </div>
+            <div className="divide-y divide-zinc-800/60">
+              {collections.top_collectors.map((c, i) => (
+                <div key={c.username} className="flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/30">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-mono text-zinc-700 w-4 text-right">{i + 1}</span>
+                    <Link href={`/u/${c.username}`} className="font-mono text-sm text-zinc-300 hover:text-amber-400 transition-colors">
+                      @{c.username}
+                    </Link>
+                    {c.display_name && <span className="text-[10px] text-zinc-600 font-mono">{c.display_name}</span>}
+                  </div>
+                  <span className="text-amber-400 font-bold font-mono">{c.owned}</span>
+                </div>
+              ))}
+              {collections.top_collectors.length === 0 && <p className="px-4 py-4 text-zinc-600 font-mono text-xs">No collections yet</p>}
+            </div>
+          </div>
+
+          {/* Most collected */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-800/40 border-b border-zinc-800">
+              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">🔥 Most Collected</p>
+            </div>
+            <div className="divide-y divide-zinc-800/60">
+              {collections.most_collected.map((c, i) => (
+                <div key={c.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/30">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-mono text-zinc-700 w-4 text-right">{i + 1}</span>
+                    <Link href={`/calculators/${c.id}`} className="font-mono text-sm text-zinc-300 hover:text-amber-400 transition-colors">
+                      {c.make} {c.model}
+                    </Link>
+                  </div>
+                  <span className="text-amber-400 font-bold font-mono">{c.total}</span>
+                </div>
+              ))}
+              {collections.most_collected.length === 0 && <p className="px-4 py-4 text-zinc-600 font-mono text-xs">No collections yet</p>}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Email config notice */}
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+        <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-1">📧 Email Notifications</p>
+        <p className="text-xs font-mono text-zinc-500">
+          Notifications go to <span className="text-zinc-300">klay.adams326@gmail.com</span> on new user registrations and calculator changes.
+          Set <span className="text-amber-400/70">SMTP_USER</span> + <span className="text-amber-400/70">SMTP_PASSWORD</span> in{' '}
+          <span className="text-zinc-300">/opt/curiocalc/.env</span> then restart the backend to enable.
+        </p>
+      </div>
     </div>
   );
 }
