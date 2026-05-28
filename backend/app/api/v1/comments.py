@@ -6,6 +6,9 @@ from sqlalchemy import select
 from app.api.deps import get_db, get_current_user
 from app.models.comment import Comment
 from app.models.user import User
+from app.models.collection import CollectionEntry
+from app.models.calculator import Calculator
+from app.models.notification import Notification
 from app.schemas.comment import CommentCreate, CommentPublic
 
 router = APIRouter(tags=["comments"])
@@ -56,6 +59,37 @@ async def create_comment(
     db.add(comment)
     await db.commit()
     await db.refresh(comment)
+
+    # Notify owners of this calc (up to 20, skip the commenter)
+    calc_r = await db.execute(select(Calculator).where(Calculator.id == calc_id))
+    calc = calc_r.scalar_one_or_none()
+    if calc:
+        owners_r = await db.execute(
+            select(CollectionEntry.user_id)
+            .where(
+                CollectionEntry.calculator_id == calc_id,
+                CollectionEntry.status == "owned",
+                CollectionEntry.user_id != current_user.id,
+            )
+            .limit(20)
+        )
+        owner_ids = [row[0] for row in owners_r.all()]
+        for uid in owner_ids:
+            db.add(Notification(
+                user_id=uid,
+                type="comment",
+                actor_id=current_user.id,
+                actor_username=current_user.username,
+                actor_display_name=current_user.display_name,
+                actor_avatar_url=current_user.avatar_url,
+                calc_id=calc.id,
+                calc_make=calc.make,
+                calc_model=calc.model,
+                body=payload.content[:120] if payload.content else None,
+            ))
+        if owner_ids:
+            await db.commit()
+
     return _to_public(comment, current_user)
 
 

@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.follow import Follow
 from app.models.collection import CollectionEntry
 from app.models.calculator import Calculator
+from app.models.notification import Notification
 from app.schemas.user import UserPublic
 
 router = APIRouter(tags=["follows"])
@@ -29,6 +30,15 @@ async def follow_user(
 
     db.add(Follow(follower_id=me.id, following_id=target.id))
     try:
+        await db.commit()
+        db.add(Notification(
+            user_id=target.id,
+            type="follow",
+            actor_id=me.id,
+            actor_username=me.username,
+            actor_display_name=me.display_name,
+            actor_avatar_url=me.avatar_url,
+        ))
         await db.commit()
     except IntegrityError:
         await db.rollback()  # already following — treat as no-op

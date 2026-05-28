@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, type CollectionEntry, type Calculator } from '@/lib/api';
@@ -24,9 +24,78 @@ function exportCSV(entries: EntryWithCalc[], username: string) {
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `curiocalc-${username}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `curiocalc-${username}-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
 }
+
+// ── Per-entry photo panel ────────────────────────────────────────────────────
+
+function PhotoPanel({ entry, onUpdate }: { entry: EntryWithCalc; onUpdate: (updated: CollectionEntry) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<number | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const updated = await api.collection.uploadPhoto(entry.id, file);
+      onUpdate(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleRemove = async (index: number) => {
+    setRemoving(index);
+    try {
+      const updated = await api.collection.removePhoto(entry.id, index);
+      onUpdate(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Remove failed');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  return (
+    <div className="px-4 pb-4 pt-2 border-t border-zinc-800/60">
+      {error && <p className="text-red-400 font-mono text-xs mb-2">{error}</p>}
+      {entry.photos.length > 0 && (
+        <div className="flex gap-2 flex-wrap mb-3">
+          {entry.photos.map((url, i) => (
+            <div key={i} className="relative group/photo w-16 h-16">
+              <img src={url} alt="" className="w-full h-full object-cover rounded-lg border border-zinc-700" />
+              <button
+                onClick={() => handleRemove(i)}
+                disabled={removing === i}
+                className="absolute inset-0 bg-black/60 rounded-lg opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-red-400 text-xs font-mono"
+              >
+                {removing === i ? '…' : '✕'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+      <button
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        className="flex items-center gap-2 text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-dashed border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+      >
+        {uploading ? <><span className="animate-spin inline-block">⟳</span> Uploading…</> : <>📷 Add photo</>}
+      </button>
+    </div>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
 
 export default function CollectionPage() {
   const { user, loading: authLoading } = useAuth();
@@ -34,6 +103,7 @@ export default function CollectionPage() {
   const [entries, setEntries] = useState<EntryWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'owned' | 'wanted'>('owned');
+  const [expandedPhotos, setExpandedPhotos] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -59,10 +129,22 @@ export default function CollectionPage() {
     setEntries(prev => prev.filter(e => e.id !== id));
   };
 
+  const updateEntry = (updated: CollectionEntry) => {
+    setEntries(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e));
+  };
+
+  const togglePhotos = (id: string) => {
+    setExpandedPhotos(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
   if (authLoading || !user) return null;
 
-  const owned   = entries.filter(e => e.status === 'owned');
-  const wanted  = entries.filter(e => e.status === 'wanted');
+  const owned = entries.filter(e => e.status === 'owned');
+  const wanted = entries.filter(e => e.status === 'wanted');
   const forSale = entries.filter(e => e.status === 'for_sale');
   const filtered = activeTab === 'owned' ? owned : wanted;
 
@@ -134,52 +216,80 @@ export default function CollectionPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(entry => (
-            <div key={entry.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 group hover:border-zinc-700 transition-colors">
-              {/* Thumbnail */}
-              <Link href={`/calculators/${entry.calculator_id}`} className="flex-shrink-0">
-                <div className="w-14 h-14 bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden">
-                  {entry.calculator?.images[0] ? (
-                    <img src={entry.calculator.images[0]} alt="" className="w-full h-full object-contain" />
-                  ) : (
-                    <span className="text-2xl opacity-20">🧮</span>
-                  )}
-                </div>
-              </Link>
+          {filtered.map(entry => {
+            const photosOpen = expandedPhotos.has(entry.id);
+            return (
+              <div key={entry.id} className="bg-zinc-900 border border-zinc-800 rounded-xl group hover:border-zinc-700 transition-colors">
+                <div className="p-4 flex items-center gap-4">
+                  {/* Thumbnail — shows first user photo if available, else catalog image */}
+                  <Link href={`/calculators/${entry.calculator_id}`} className="flex-shrink-0">
+                    <div className="w-14 h-14 bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden">
+                      {entry.photos[0] ? (
+                        <img src={entry.photos[0]} alt="" className="w-full h-full object-cover" />
+                      ) : entry.calculator?.images[0] ? (
+                        <img src={entry.calculator.images[0]} alt="" className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-2xl opacity-20">🧮</span>
+                      )}
+                    </div>
+                  </Link>
 
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <Link href={`/calculators/${entry.calculator_id}`}>
-                  <p className="text-[10px] text-zinc-600 font-mono">{entry.calculator?.make}</p>
-                  <p className="font-bold font-mono text-zinc-100 truncate text-sm hover:text-amber-400 transition-colors">
-                    {entry.calculator?.model ?? entry.calculator_id}
-                  </p>
-                </Link>
-                <div className="flex gap-3 mt-1 flex-wrap">
-                  {entry.condition && (
-                    <span className="text-[10px] text-zinc-600 font-mono capitalize">{entry.condition}</span>
-                  )}
-                  {entry.acquired_from && (
-                    <span className="text-[10px] text-zinc-600 font-mono">from {entry.acquired_from}</span>
-                  )}
-                  {entry.acquired_price != null && (
-                    <span className="text-[10px] text-zinc-600 font-mono">${entry.acquired_price}</span>
-                  )}
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/calculators/${entry.calculator_id}`}>
+                      <p className="text-[10px] text-zinc-600 font-mono">{entry.calculator?.make}</p>
+                      <p className="font-bold font-mono text-zinc-100 truncate text-sm hover:text-amber-400 transition-colors">
+                        {entry.calculator?.model ?? entry.calculator_id}
+                      </p>
+                    </Link>
+                    <div className="flex gap-3 mt-1 flex-wrap">
+                      {entry.condition && (
+                        <span className="text-[10px] text-zinc-600 font-mono capitalize">{entry.condition}</span>
+                      )}
+                      {entry.acquired_from && (
+                        <span className="text-[10px] text-zinc-600 font-mono">from {entry.acquired_from}</span>
+                      )}
+                      {entry.acquired_price != null && (
+                        <span className="text-[10px] text-zinc-600 font-mono">${entry.acquired_price}</span>
+                      )}
+                      {entry.photos.length > 0 && (
+                        <span className="text-[10px] text-zinc-600 font-mono">📷 {entry.photos.length}</span>
+                      )}
+                    </div>
+                    {entry.notes && (
+                      <p className="text-xs text-zinc-500 mt-0.5 truncate">{entry.notes}</p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {activeTab === 'owned' && (
+                      <button
+                        onClick={() => togglePhotos(entry.id)}
+                        className={`text-zinc-500 hover:text-zinc-200 transition-colors font-mono text-xs px-2 py-1 rounded border ${
+                          photosOpen ? 'border-zinc-600 text-zinc-300 bg-zinc-800' : 'border-zinc-700'
+                        }`}
+                        title="Photos"
+                      >
+                        📷
+                      </button>
+                    )}
+                    <button
+                      onClick={() => remove(entry.id)}
+                      className="text-zinc-700 hover:text-red-500 transition-colors font-mono text-xs"
+                    >
+                      remove
+                    </button>
+                  </div>
                 </div>
-                {entry.notes && (
-                  <p className="text-xs text-zinc-500 mt-0.5 truncate">{entry.notes}</p>
+
+                {/* Photo panel */}
+                {photosOpen && activeTab === 'owned' && (
+                  <PhotoPanel entry={entry} onUpdate={updateEntry} />
                 )}
               </div>
-
-              {/* Remove */}
-              <button
-                onClick={() => remove(entry.id)}
-                className="text-zinc-700 hover:text-red-500 transition-colors font-mono text-xs opacity-0 group-hover:opacity-100 flex-shrink-0"
-              >
-                remove
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

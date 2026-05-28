@@ -108,6 +108,26 @@ async def upload_entry_photo(
     return entry
 
 
+@router.delete("/{entry_id}/photos/{index}", response_model=CollectionEntryPublic)
+async def delete_entry_photo(
+    entry_id: uuid.UUID,
+    index: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(CollectionEntry).where(CollectionEntry.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if not entry or entry.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    photos = list(entry.photos)
+    if index < 0 or index >= len(photos):
+        raise HTTPException(status_code=400, detail="Invalid photo index")
+    entry.photos = [p for i, p in enumerate(photos) if i != index]
+    await db.commit()
+    await db.refresh(entry)
+    return entry
+
+
 @router.get("/for-sale", response_model=list[dict[str, Any]])
 async def get_for_sale_listings(db: AsyncSession = Depends(get_db)):
     """All public for-sale listings with basic calculator + seller info."""

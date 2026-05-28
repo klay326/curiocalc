@@ -73,6 +73,20 @@ export type FollowUser = {
   avatar_url: string | null;
 };
 
+export type NotificationItem = {
+  id: string;
+  type: string;
+  read: boolean;
+  actor_username: string | null;
+  actor_display_name: string | null;
+  actor_avatar_url: string | null;
+  calc_id: string | null;
+  calc_make: string | null;
+  calc_model: string | null;
+  body: string | null;
+  created_at: string;
+};
+
 export type FeedItem = {
   id: string;
   status: 'owned' | 'wanted' | 'for_sale';
@@ -315,6 +329,23 @@ export const api = {
     update: (id: string, data: Partial<CollectionEntry>) =>
       request<CollectionEntry>(`/api/v1/collections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: string) => request<void>(`/api/v1/collections/${id}`, { method: 'DELETE' }),
+    uploadPhoto: async (entryId: string, file: File): Promise<CollectionEntry> => {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API_URL}/api/v1/collections/${entryId}/photos`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Upload failed');
+      }
+      return res.json();
+    },
+    removePhoto: (entryId: string, index: number) =>
+      request<CollectionEntry>(`/api/v1/collections/${entryId}/photos/${index}`, { method: 'DELETE' }),
   },
 
   users: {
@@ -376,5 +407,12 @@ export const api = {
     },
     review: (id: string, data: { status: 'approved' | 'rejected'; reviewer_note?: string }) =>
       request<EditSuggestion>(`/api/v1/suggestions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  },
+
+  notifications: {
+    list: () => request<{ unread: number; notifications: NotificationItem[] }>('/api/v1/notifications'),
+    unreadCount: () => request<number>('/api/v1/notifications/unread-count').then((r: unknown) => (r as { count: number }).count),
+    markRead: () => request<void>('/api/v1/notifications/mark-read', { method: 'POST' }),
+    dismiss: (id: string) => request<void>(`/api/v1/notifications/${id}`, { method: 'DELETE' }),
   },
 };
