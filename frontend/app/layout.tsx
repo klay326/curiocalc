@@ -11,6 +11,17 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 export const metadata: Metadata = {
   title: 'CurioCalc — The Calculator Collection Community',
   description: 'Browse, catalog, and share your calculator collection. From everyday scientific models to the bizarre and obscure.',
+  openGraph: {
+    siteName: 'CurioCalc',
+    type: 'website',
+    title: 'CurioCalc — The Calculator Collection Community',
+    description: 'Browse, catalog, and share your calculator collection. From everyday scientific models to the bizarre and obscure.',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'CurioCalc — The Calculator Collection Community',
+    description: 'Browse, catalog, and share your calculator collection. From everyday scientific models to the bizarre and obscure.',
+  },
 };
 
 // Inline script runs before React hydrates — prevents flash of wrong theme
