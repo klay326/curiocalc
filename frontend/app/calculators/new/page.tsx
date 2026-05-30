@@ -12,7 +12,7 @@ const COMMON_COUNTRIES = ['Japan','USA','Taiwan','China','Germany','UK','France'
 type Form = {
   make: string; model: string; year_introduced: string; year_discontinued: string;
   calc_type: string; display_type: string; power_source: string; num_keys: string;
-  country_of_origin: string; description: string; fun_facts: string; tags: string;
+  country_of_origin: string; description: string; fun_facts: string; manual_url: string; tags: string;
   variant_label: string; image_urls: string;
   rarity_score: string; weirdness_score: string;
 };
@@ -20,7 +20,7 @@ type Form = {
 const EMPTY: Form = {
   make:'', model:'', year_introduced:'', year_discontinued:'', calc_type:'scientific',
   display_type:'LCD', power_source:'', num_keys:'', country_of_origin:'',
-  description:'', fun_facts:'', tags:'', variant_label:'', image_urls:'',
+  description:'', fun_facts:'', manual_url:'', tags:'', variant_label:'', image_urls:'',
   rarity_score:'', weirdness_score:'',
 };
 
@@ -150,6 +150,7 @@ export default function NewCalculatorPage() {
         country_of_origin: form.country_of_origin.trim() || undefined,
         description: form.description.trim() || undefined,
         fun_facts: form.fun_facts.trim() || undefined,
+        manual_url: form.manual_url.trim() || undefined,
         tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         images: imageList,
         parent_id: parentCalc?.id || undefined,
@@ -317,6 +318,7 @@ export default function NewCalculatorPage() {
             placeholder="What makes this calculator special? Its history, use, notable features…" rows={4} />
           <TextArea label="Fun facts / lore" value={form.fun_facts} onChange={set('fun_facts')}
             placeholder="Weird quirks, famous uses, collector notes…" rows={3} />
+          <Field label="Manual URL" value={form.manual_url} onChange={set('manual_url')} placeholder="https://…" />
           <Field label="Tags (comma-separated)" value={form.tags} onChange={set('tags')} placeholder="graphing, school, iconic, TI" />
         </section>
 

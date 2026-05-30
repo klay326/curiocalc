@@ -7,6 +7,74 @@ import { useAuth } from '@/lib/auth';
 
 type EntryWithCalc = CollectionEntry & { calculator?: Calculator };
 
+// ── Mark-for-sale inline form ────────────────────────────────────────────────
+
+function ForSaleForm({
+  entry,
+  onSave,
+  onCancel,
+}: {
+  entry: EntryWithCalc;
+  onSave: (updated: CollectionEntry) => void;
+  onCancel: () => void;
+}) {
+  const [price, setPrice] = useState(entry.acquired_price != null ? String(entry.acquired_price) : '');
+  const [notes, setNotes] = useState(entry.notes ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.collection.update(entry.id, {
+        status: 'for_sale',
+        acquired_price: price ? parseFloat(price) : entry.acquired_price,
+        notes: notes.trim() || entry.notes,
+      } as Partial<CollectionEntry>);
+      onSave(updated);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="px-4 pb-4 pt-3 border-t border-zinc-800/60 bg-zinc-950/40">
+      <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">List for sale</p>
+      {error && <p className="text-red-400 font-mono text-xs mb-2">{error}</p>}
+      <div className="flex gap-2 mb-2">
+        <div className="flex-1">
+          <label className="text-[10px] font-mono text-zinc-600 block mb-1">Asking price ($)</label>
+          <input
+            type="number" value={price} onChange={e => setPrice(e.target.value)}
+            placeholder="e.g. 45.00" min="0" step="0.01"
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-xs focus:outline-none focus:border-green-500 transition-colors"
+          />
+        </div>
+      </div>
+      <div className="mb-3">
+        <label className="text-[10px] font-mono text-zinc-600 block mb-1">Listing notes</label>
+        <textarea
+          value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+          placeholder="Condition details, shipping info, etc."
+          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-xs focus:outline-none focus:border-green-500 transition-colors resize-none"
+        />
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onCancel}
+          className="px-3 py-1.5 bg-zinc-800 text-zinc-400 rounded-lg font-mono text-xs hover:bg-zinc-700 border border-zinc-700 transition-colors">
+          cancel
+        </button>
+        <button onClick={handleSave} disabled={saving}
+          className="px-3 py-1.5 bg-green-600 text-white rounded-lg font-mono text-xs font-bold hover:bg-green-500 transition-colors disabled:opacity-50">
+          {saving ? 'Listing…' : '🏷 List for sale'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function exportCSV(entries: EntryWithCalc[], username: string) {
   const headers = ['Make', 'Model', 'Status', 'Condition', 'Notes', 'Acquired From', 'Price Paid', 'Date Added', 'Year Introduced'];
   const rows = entries.map(e => [
@@ -226,8 +294,9 @@ export default function CollectionPage() {
   const router = useRouter();
   const [entries, setEntries] = useState<EntryWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'owned' | 'wanted' | 'stats'>('owned');
+  const [activeTab, setActiveTab] = useState<'owned' | 'wanted' | 'for_sale' | 'stats'>('owned');
   const [expandedPhotos, setExpandedPhotos] = useState<Set<string>>(new Set());
+  const [expandedForSale, setExpandedForSale] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -254,8 +323,21 @@ export default function CollectionPage() {
     setEntries(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e));
   };
 
+  const unlist = async (id: string) => {
+    const updated = await api.collection.update(id, { status: 'owned' } as Partial<CollectionEntry>);
+    updateEntry(updated);
+  };
+
   const togglePhotos = (id: string) => {
     setExpandedPhotos(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleForSale = (id: string) => {
+    setExpandedForSale(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -267,7 +349,7 @@ export default function CollectionPage() {
   const owned   = entries.filter(e => e.status === 'owned');
   const wanted  = entries.filter(e => e.status === 'wanted');
   const forSale = entries.filter(e => e.status === 'for_sale');
-  const filtered = activeTab === 'owned' ? owned : activeTab === 'wanted' ? wanted : [];
+  const filtered = activeTab === 'owned' ? owned : activeTab === 'wanted' ? wanted : activeTab === 'for_sale' ? forSale : [];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -301,27 +383,28 @@ export default function CollectionPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
-        {(['owned', 'wanted', 'stats'] as const).map(tab => (
+        {[
+          { key: 'owned',    label: `Owned (${owned.length})` },
+          { key: 'wanted',   label: `Wishlist (${wanted.length})` },
+          { key: 'for_sale', label: `For Sale (${forSale.length})` },
+          { key: 'stats',    label: '📊 Stats' },
+        ].map(({ key, label }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={key}
+            onClick={() => setActiveTab(key as typeof activeTab)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors ${
-              activeTab === tab
-                ? 'bg-amber-400 text-zinc-950 font-bold'
-                : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200'
+              activeTab === key
+                ? key === 'for_sale'
+                  ? 'bg-green-600 text-white font-bold'
+                  : 'bg-amber-400 text-zinc-950 font-bold'
+                : key === 'for_sale' && forSale.length > 0
+                  ? 'bg-zinc-900 border border-green-900/50 text-green-500 hover:border-green-700/60'
+                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            {tab === 'owned'  ? `Owned (${owned.length})`
-            : tab === 'wanted' ? `Wishlist (${wanted.length})`
-            : '📊 Stats'}
+            {label}
           </button>
         ))}
-        {forSale.length > 0 && (
-          <Link href="/trade"
-            className="px-4 py-2 rounded-lg font-mono text-sm text-green-400 border border-green-900/40 hover:border-green-700/60 transition-colors">
-            🏷 For sale ({forSale.length})
-          </Link>
-        )}
       </div>
 
       {/* Stats tab content */}
@@ -335,18 +418,27 @@ export default function CollectionPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-zinc-600 font-mono">
-            <div className="text-4xl mb-3">🧮</div>
-            <p className="text-sm">{activeTab === 'owned' ? "No calculators in your collection yet." : "Your wishlist is empty."}</p>
-            <Link href="/" className="text-amber-400 hover:text-amber-300 text-xs mt-2 inline-block transition-colors">
-              Browse the catalog →
-            </Link>
+            <div className="text-4xl mb-3">{activeTab === 'for_sale' ? '🏷' : '🧮'}</div>
+            <p className="text-sm">
+              {activeTab === 'owned' ? "No calculators in your collection yet."
+               : activeTab === 'wanted' ? "Your wishlist is empty."
+               : "No items listed for sale. Hover an owned calculator and click 🏷 to list it."}
+            </p>
+            {activeTab !== 'for_sale' && (
+              <Link href="/" className="text-amber-400 hover:text-amber-300 text-xs mt-2 inline-block transition-colors">
+                Browse the catalog →
+              </Link>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
             {filtered.map(entry => {
               const photosOpen = expandedPhotos.has(entry.id);
+              const forSaleOpen = expandedForSale.has(entry.id);
               return (
-                <div key={entry.id} className="bg-zinc-900 border border-zinc-800 rounded-xl group hover:border-zinc-700 transition-colors">
+                <div key={entry.id} className={`bg-zinc-900 border rounded-xl group transition-colors ${
+                  activeTab === 'for_sale' ? 'border-green-900/40 hover:border-green-800/60' : 'border-zinc-800 hover:border-zinc-700'
+                }`}>
                   <div className="p-4 flex items-center gap-4">
                     {/* Thumbnail */}
                     <Link href={`/calculators/${entry.calculator_id}`} className="flex-shrink-0">
@@ -376,10 +468,13 @@ export default function CollectionPage() {
                         {entry.condition && (
                           <span className="text-[10px] text-zinc-600 font-mono capitalize">{entry.condition}</span>
                         )}
-                        {entry.acquired_from && (
+                        {activeTab === 'for_sale' && entry.acquired_price != null && (
+                          <span className="text-[10px] text-green-500 font-mono font-bold">${entry.acquired_price}</span>
+                        )}
+                        {activeTab !== 'for_sale' && entry.acquired_from && (
                           <span className="text-[10px] text-zinc-600 font-mono">from {entry.acquired_from}</span>
                         )}
-                        {entry.acquired_price != null && (
+                        {activeTab !== 'for_sale' && entry.acquired_price != null && (
                           <span className="text-[10px] text-zinc-600 font-mono">${entry.acquired_price}</span>
                         )}
                         {entry.photos.length > 0 && (
@@ -394,14 +489,34 @@ export default function CollectionPage() {
                     {/* Actions */}
                     <div className="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                       {activeTab === 'owned' && (
+                        <>
+                          <button
+                            onClick={() => togglePhotos(entry.id)}
+                            className={`text-zinc-500 hover:text-zinc-200 transition-colors font-mono text-xs px-2 py-1 rounded border ${
+                              photosOpen ? 'border-zinc-600 text-zinc-300 bg-zinc-800' : 'border-zinc-700'
+                            }`}
+                            title="Photos"
+                          >
+                            📷
+                          </button>
+                          <button
+                            onClick={() => toggleForSale(entry.id)}
+                            className={`text-zinc-500 hover:text-green-400 transition-colors font-mono text-xs px-2 py-1 rounded border ${
+                              forSaleOpen ? 'border-green-700/60 text-green-400 bg-green-950/30' : 'border-zinc-700'
+                            }`}
+                            title="List for sale"
+                          >
+                            🏷
+                          </button>
+                        </>
+                      )}
+                      {activeTab === 'for_sale' && (
                         <button
-                          onClick={() => togglePhotos(entry.id)}
-                          className={`text-zinc-500 hover:text-zinc-200 transition-colors font-mono text-xs px-2 py-1 rounded border ${
-                            photosOpen ? 'border-zinc-600 text-zinc-300 bg-zinc-800' : 'border-zinc-700'
-                          }`}
-                          title="Photos"
+                          onClick={() => unlist(entry.id)}
+                          className="text-zinc-500 hover:text-zinc-200 transition-colors font-mono text-xs px-2 py-1 rounded border border-zinc-700 hover:border-zinc-500"
+                          title="Remove listing"
                         >
-                          📷
+                          unlist
                         </button>
                       )}
                       <button
@@ -416,6 +531,19 @@ export default function CollectionPage() {
                   {/* Photo panel */}
                   {photosOpen && activeTab === 'owned' && (
                     <PhotoPanel entry={entry} onUpdate={updateEntry} />
+                  )}
+
+                  {/* For-sale form */}
+                  {forSaleOpen && activeTab === 'owned' && (
+                    <ForSaleForm
+                      entry={entry}
+                      onSave={(updated) => {
+                        updateEntry(updated);
+                        setExpandedForSale(prev => { const n = new Set(prev); n.delete(entry.id); return n; });
+                        setActiveTab('for_sale');
+                      }}
+                      onCancel={() => toggleForSale(entry.id)}
+                    />
                   )}
                 </div>
               );

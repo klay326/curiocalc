@@ -18,6 +18,7 @@ export type Calculator = {
   weirdness_score: number | null;
   is_verified: boolean;
   tags: string[];
+  manual_url: string | null;
   external_refs: Array<{ label: string; url: string }>;
   owner_count: number;
   want_count: number;
@@ -335,7 +336,7 @@ export const api = {
       request<CollectionEntry>(`/api/v1/collections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id: string) => request<void>(`/api/v1/collections/${id}`, { method: 'DELETE' }),
     uploadPhoto: async (entryId: string, file: File): Promise<CollectionEntry> => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
       const form = new FormData();
       form.append('file', file);
       const res = await fetch(`${API_URL}/api/v1/collections/${entryId}/photos`, {

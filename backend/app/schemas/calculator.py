@@ -56,11 +56,13 @@ class CalculatorUpdate(BaseModel):
     country_of_origin: str | None = None
     description: str | None = None
     fun_facts: str | None = None
+    manual_url: str | None = None
     tags: list[str] | None = None
     external_refs: list[dict] | None = None
     images: list[str] | None = None
     rarity_score: float | None = None
     weirdness_score: float | None = None
+    is_verified: bool | None = None
     parent_id: uuid.UUID | None = None
     variant_label: str | None = None
 

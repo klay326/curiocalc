@@ -329,6 +329,12 @@ export default function CalculatorPage() {
               className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-colors">
               Wikipedia ↗
             </a>
+            {calc.manual_url && (
+              <a href={calc.manual_url} target="_blank" rel="noopener noreferrer"
+                className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-colors">
+                📄 Manual ↗
+              </a>
+            )}
             {calc.external_refs.map(ref =>
               ref.url ? (
                 <a key={ref.label} href={ref.url} target="_blank" rel="noopener noreferrer"
@@ -570,6 +576,7 @@ function AdminEditPanel({
   const [country, setCountry]             = useState(calc.country_of_origin ?? '');
   const [description, setDescription]    = useState(calc.description ?? '');
   const [funFacts, setFunFacts]           = useState(calc.fun_facts ?? '');
+  const [manualUrl, setManualUrl]         = useState(calc.manual_url ?? '');
   const [rarity, setRarity]               = useState(String(calc.rarity_score ?? ''));
   const [weirdness, setWeirdness]         = useState(String(calc.weirdness_score ?? ''));
   const [tagsRaw, setTagsRaw]             = useState(calc.tags.join(', '));
@@ -629,6 +636,7 @@ function AdminEditPanel({
         country_of_origin:  country.trim() || null,
         description:        description.trim() || null,
         fun_facts:          funFacts.trim() || null,
+        manual_url:         manualUrl.trim() || null,
         rarity_score:       rarity    ? parseFloat(rarity)    : null,
         weirdness_score:    weirdness ? parseFloat(weirdness) : null,
         tags:               tagsRaw.split(',').map(s => s.trim()).filter(Boolean),
@@ -772,6 +780,10 @@ function AdminEditPanel({
             <FieldLabel>Fun facts</FieldLabel>
             <textarea value={funFacts} onChange={e => setFunFacts(e.target.value)} rows={3}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors resize-y" />
+          </div>
+          <div>
+            <FieldLabel>Manual URL</FieldLabel>
+            <TextInput value={manualUrl} onChange={setManualUrl} placeholder="https://…" />
           </div>
         </div>
       </section>

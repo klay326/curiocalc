@@ -108,7 +108,7 @@ export default function TradePage() {
                       </p>
                     </Link>
                   </div>
-                  {listing.acquired_price && (
+                  {listing.acquired_price != null && (
                     <span className="text-sm font-bold font-mono text-green-400 flex-shrink-0">
                       ${listing.acquired_price}
                     </span>
