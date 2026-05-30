@@ -46,20 +46,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { setTheme } = useTheme();
 
-  const applyUser = (u: AuthUser) => {
-    setUser(u);
-    if (u.theme && THEMES.includes(u.theme as Theme)) {
-      setTheme(u.theme as Theme);
+  /** Apply a server theme only when the user explicitly chose it (not the factory default). */
+  const applyServerTheme = (serverTheme: string) => {
+    if (THEMES.includes(serverTheme as Theme)) {
+      const local = typeof window !== 'undefined' ? localStorage.getItem('cc-theme') : null;
+      // Override local only if the server has a non-default value, or there is no local preference.
+      if (serverTheme !== 'obsidian' || !local) {
+        setTheme(serverTheme as Theme);
+      }
     }
   };
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      // No access token — try refresh token instead
       tryRefresh().then(ok => {
         if (ok) {
-          api.auth.me().then(applyUser).catch(() => {}).finally(() => setLoading(false));
+          api.auth.me().then(u => { setUser(u); applyServerTheme(u.theme); }).catch(() => {}).finally(() => setLoading(false));
         } else {
           setLoading(false);
         }
@@ -67,12 +70,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     api.auth.me()
-      .then(applyUser)
+      .then(u => { setUser(u); applyServerTheme(u.theme); })
       .catch(async () => {
-        // Access token invalid/expired — try to refresh
         const ok = await tryRefresh();
         if (ok) {
-          api.auth.me().then(applyUser).catch(() => {
+          api.auth.me().then(u => { setUser(u); applyServerTheme(u.theme); }).catch(() => {
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
           });
@@ -90,7 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('access_token', access_token);
     if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
     const me = await api.auth.me();
-    applyUser(me);
+    setUser(me);
+    // Always apply theme on explicit login — user intentionally signed in.
+    if (THEMES.includes(me.theme as Theme)) {
+      setTheme(me.theme as Theme);
+    }
   };
 
   const logout = () => {
@@ -102,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     try {
       const me = await api.auth.me();
-      applyUser(me);
+      setUser(me);
     } catch {}
   };
 

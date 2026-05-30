@@ -151,6 +151,10 @@ function NotificationBell() {
 export function Nav() {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
+  const pathname = usePathname();
+  const [showPicker, setShowPicker] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const pickTheme = (t: (typeof THEMES)[number]) => {
     setTheme(t);
@@ -159,10 +163,6 @@ export function Nav() {
       api.users.updateMe({ theme: t }).catch(() => {});
     }
   };
-  const pathname = usePathname();
-  const [showPicker, setShowPicker] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
