@@ -20,6 +20,8 @@ class User(Base):
     location: Mapped[str | None] = mapped_column(String(100))
     website: Mapped[str | None] = mapped_column(String(500))
 
+    theme: Mapped[str] = mapped_column(String(20), default='obsidian')
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)

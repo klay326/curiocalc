@@ -28,16 +28,16 @@ export const metadata: Metadata = {
 const themeScript = `
 (function(){
   try {
-    var t = localStorage.getItem('cc-theme') || 'crimson';
-    var valid = ['crimson','obsidian','terminal','ocean','ember','paper'];
-    document.documentElement.setAttribute('data-theme', valid.includes(t) ? t : 'crimson');
+    var t = localStorage.getItem('cc-theme') || 'obsidian';
+    var valid = ['obsidian','crimson','terminal','ocean','ember','paper'];
+    document.documentElement.setAttribute('data-theme', valid.includes(t) ? t : 'obsidian');
   } catch(e){}
 })();
 `;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="crimson" suppressHydrationWarning>
+    <html lang="en" data-theme="obsidian" suppressHydrationWarning>
       <head>
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />

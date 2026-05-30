@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { THEMES, THEME_META, type Theme } from '@/lib/theme';
 
 const RULES = [
   { id: 'len',   label: 'At least 8 characters',          test: (p: string) => p.length >= 8 },
@@ -12,6 +13,9 @@ const RULES = [
   { id: 'num',   label: 'One number (0–9)',                test: (p: string) => /[0-9]/.test(p) },
   { id: 'sym',   label: 'One special character (!@#$…)',   test: (p: string) => /[^A-Za-z0-9]/.test(p) },
 ];
+
+const DARK_THEMES  = THEMES.filter(t => t !== 'paper');
+const LIGHT_THEMES = THEMES.filter(t => t === 'paper');
 
 function PasswordStrength({ password }: { password: string }) {
   const results = useMemo(() => RULES.map(r => ({ ...r, ok: r.test(password) })), [password]);
@@ -31,7 +35,6 @@ function PasswordStrength({ password }: { password: string }) {
 
   return (
     <div className="mt-3 space-y-2">
-      {/* Strength bar */}
       <div className="flex items-center gap-2">
         <div className="flex-1 flex gap-1">
           {[1,2,3,4,5].map(i => (
@@ -46,8 +49,6 @@ function PasswordStrength({ password }: { password: string }) {
           </span>
         )}
       </div>
-
-      {/* Rules checklist */}
       <div className="space-y-1">
         {results.map(rule => (
           <div key={rule.id} className="flex items-center gap-2">
@@ -64,10 +65,38 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
+function ThemeSwatch({ t, selected, onSelect }: { t: Theme; selected: boolean; onSelect: () => void }) {
+  const meta = THEME_META[t];
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all ${
+        selected
+          ? 'border-amber-400/60 bg-zinc-800 text-zinc-100'
+          : 'border-zinc-700/60 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200'
+      }`}
+    >
+      <span
+        className="w-4 h-4 rounded-full flex-shrink-0 border border-white/10"
+        style={{ backgroundColor: meta.dot }}
+      />
+      <div className="min-w-0">
+        <p className="text-xs font-mono font-semibold leading-none">{meta.label}</p>
+        <p className="text-[10px] font-mono text-zinc-500 mt-0.5 leading-none truncate">{meta.description}</p>
+      </div>
+      {selected && (
+        <span className="ml-auto text-amber-400 text-[11px] font-mono flex-shrink-0">✓</span>
+      )}
+    </button>
+  );
+}
+
 export default function RegisterPage() {
   const { login } = useAuth();
   const router = useRouter();
   const [form, setForm] = useState({ email: '', username: '', password: '', display_name: '' });
+  const [selectedTheme, setSelectedTheme] = useState<Theme>('obsidian');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -86,7 +115,7 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      await api.auth.register(form);
+      await api.auth.register({ ...form, theme: selectedTheme });
       await login(form.email, form.password);
       router.push('/collection');
     } catch (err: unknown) {
@@ -103,7 +132,7 @@ export default function RegisterPage() {
   ] as const;
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-4xl mb-3">🧮</div>
@@ -142,6 +171,27 @@ export default function RegisterPage() {
               }`}
             />
             <PasswordStrength password={form.password} />
+          </div>
+
+          {/* Theme picker */}
+          <div>
+            <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block mb-2">
+              Choose your theme
+            </label>
+
+            <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-1.5">Dark</p>
+            <div className="space-y-1 mb-3">
+              {DARK_THEMES.map(t => (
+                <ThemeSwatch key={t} t={t} selected={selectedTheme === t} onSelect={() => setSelectedTheme(t)} />
+              ))}
+            </div>
+
+            <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-1.5">Light</p>
+            <div className="space-y-1">
+              {LIGHT_THEMES.map(t => (
+                <ThemeSwatch key={t} t={t} selected={selectedTheme === t} onSelect={() => setSelectedTheme(t)} />
+              ))}
+            </div>
           </div>
 
           <button

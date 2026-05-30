@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { api, type AuthUser } from './api';
+import { useTheme, type Theme, THEMES } from './theme';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://10.0.0.19:8000';
 
@@ -43,6 +44,14 @@ async function tryRefresh(): Promise<boolean> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const { setTheme } = useTheme();
+
+  const applyUser = (u: AuthUser) => {
+    setUser(u);
+    if (u.theme && THEMES.includes(u.theme as Theme)) {
+      setTheme(u.theme as Theme);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -50,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // No access token — try refresh token instead
       tryRefresh().then(ok => {
         if (ok) {
-          api.auth.me().then(setUser).catch(() => {}).finally(() => setLoading(false));
+          api.auth.me().then(applyUser).catch(() => {}).finally(() => setLoading(false));
         } else {
           setLoading(false);
         }
@@ -58,12 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     api.auth.me()
-      .then(setUser)
+      .then(applyUser)
       .catch(async () => {
         // Access token invalid/expired — try to refresh
         const ok = await tryRefresh();
         if (ok) {
-          api.auth.me().then(setUser).catch(() => {
+          api.auth.me().then(applyUser).catch(() => {
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
           });
@@ -73,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -80,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('access_token', access_token);
     if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
     const me = await api.auth.me();
-    setUser(me);
+    applyUser(me);
   };
 
   const logout = () => {
@@ -92,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     try {
       const me = await api.auth.me();
-      setUser(me);
+      applyUser(me);
     } catch {}
   };
 

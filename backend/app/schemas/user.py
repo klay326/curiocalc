@@ -14,6 +14,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    theme: str = 'obsidian'
 
 
 class UserUpdate(BaseModel):
@@ -22,6 +23,7 @@ class UserUpdate(BaseModel):
     location: str | None = None
     website: str | None = None
     avatar_url: str | None = None
+    theme: str | None = None
 
 
 class UserPublic(BaseModel):
@@ -41,6 +43,7 @@ class UserMe(UserPublic):
     email: str
     is_verified: bool
     is_superuser: bool
+    theme: str = 'obsidian'
 
 
 class UserProfile(UserPublic):

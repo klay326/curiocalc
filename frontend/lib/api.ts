@@ -40,6 +40,7 @@ export type AuthUser = {
   is_verified: boolean;
   is_superuser: boolean;
   api_key: string | null;
+  theme: string;
 };
 
 export type UserProfile = {
@@ -249,7 +250,7 @@ export const api = {
         { method: 'POST', body: form.toString(), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
     },
-    register: (data: { email: string; username: string; password: string; display_name?: string }) =>
+    register: (data: { email: string; username: string; password: string; display_name?: string; theme?: string }) =>
       request<AuthUser>('/api/v1/auth/register', { method: 'POST', body: JSON.stringify(data) }),
     me: () => request<AuthUser>('/api/v1/users/me'),
   },
@@ -360,6 +361,7 @@ export const api = {
       location?: string | null;
       website?: string | null;
       avatar_url?: string | null;
+      theme?: string | null;
     }) => request<AuthUser>('/api/v1/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
     leaderboard: () => request<LeaderboardEntry[]>('/api/v1/users/leaderboard'),
     follow: (username: string) =>

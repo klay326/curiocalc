@@ -151,6 +151,14 @@ function NotificationBell() {
 export function Nav() {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
+
+  const pickTheme = (t: (typeof THEMES)[number]) => {
+    setTheme(t);
+    setShowPicker(false);
+    if (user) {
+      api.users.updateMe({ theme: t }).catch(() => {});
+    }
+  };
   const pathname = usePathname();
   const [showPicker, setShowPicker] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -298,7 +306,7 @@ export function Nav() {
                   <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2 px-1">Theme</p>
                   <div className="space-y-0.5">
                     {THEMES.map(t => (
-                      <button key={t} onClick={() => { setTheme(t); setShowPicker(false); }}
+                      <button key={t} onClick={() => pickTheme(t)}
                         className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${theme === t ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'}`}>
                         <span className="w-3 h-3 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: THEME_META[t].dot }} />
                         <span className="text-xs font-mono">{THEME_META[t].label}</span>
@@ -327,7 +335,7 @@ export function Nav() {
                   <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2 px-1">Theme</p>
                   <div className="space-y-0.5">
                     {THEMES.map(t => (
-                      <button key={t} onClick={() => { setTheme(t); setShowPicker(false); }}
+                      <button key={t} onClick={() => pickTheme(t)}
                         className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${theme === t ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'}`}>
                         <span className="w-3 h-3 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: THEME_META[t].dot }} />
                         <span className="text-xs font-mono">{THEME_META[t].label}</span>
