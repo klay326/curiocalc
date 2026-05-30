@@ -95,9 +95,9 @@ export default function UserProfilePage() {
         setFollowerCount(p.follower_count);
         setEntries(e);
         const ids = [...new Set(e.map(entry => entry.calculator_id))];
-        const calcs = await Promise.all(ids.map(id => api.calculators.get(id).catch(() => null)));
+        const calcs = await api.calculators.batch(ids).catch(() => []);
         const map: Record<string, Calculator> = {};
-        calcs.forEach(c => { if (c) map[c.id] = c; });
+        calcs.forEach(c => { map[c.id] = c; });
         setCalcMap(map);
       })
       .catch(e => setError(e.message))

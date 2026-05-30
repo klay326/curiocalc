@@ -401,6 +401,17 @@ export default function HomePage() {
           </div>
         </>
       )}
+
+      {/* Superuser FAB */}
+      {user?.is_superuser && (
+        <Link
+          href="/calculators/new"
+          className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-amber-400 hover:bg-amber-300 text-zinc-950 rounded-full shadow-lg flex items-center justify-center text-2xl font-bold transition-colors"
+          title="Add calculator"
+        >
+          +
+        </Link>
+      )}
     </div>
   );
 }

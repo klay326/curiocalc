@@ -39,7 +39,9 @@ class CalculatorBase(BaseModel):
 
 
 class CalculatorCreate(CalculatorBase):
-    pass
+    images: list[str] = []
+    rarity_score: float | None = None
+    weirdness_score: float | None = None
 
 
 class CalculatorUpdate(BaseModel):
