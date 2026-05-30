@@ -1,7 +1,11 @@
 """
-Cloudflare R2 storage service (S3-compatible).
-Falls back to local storage in development if R2 is not configured.
+Image storage service.
+
+Uses Cloudflare R2 (S3-compatible) when configured.
+Falls back to local disk storage otherwise, serving files via the
+/uploads static mount on the backend.
 """
+import os
 import uuid
 import boto3
 from botocore.config import Config
@@ -21,31 +25,49 @@ def _get_r2_client():
 
 
 async def upload_image(file: UploadFile, folder: str = "general") -> str:
-    """Upload an image to R2 and return its public URL."""
-    if not settings.R2_ACCOUNT_ID:
-        # Dev fallback — return a placeholder
-        return f"https://placehold.co/600x400?text=dev"
-
-    ext = file.filename.split(".")[-1] if file.filename else "jpg"
-    key = f"{folder}/{uuid.uuid4()}.{ext}"
-
-    client = _get_r2_client()
+    """Upload an image and return its public URL."""
     contents = await file.read()
 
-    client.put_object(
-        Bucket=settings.R2_BUCKET_NAME,
-        Key=key,
-        Body=contents,
-        ContentType=file.content_type or "image/jpeg",
-    )
+    if settings.R2_ACCOUNT_ID:
+        # ── Cloudflare R2 ──────────────────────────────────────────────────────
+        ext = file.filename.split(".")[-1].lower() if file.filename else "jpg"
+        key = f"{folder}/{uuid.uuid4()}.{ext}"
+        client = _get_r2_client()
+        client.put_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=key,
+            Body=contents,
+            ContentType=file.content_type or "image/jpeg",
+        )
+        return f"{settings.R2_PUBLIC_URL}/{key}"
 
-    return f"{settings.R2_PUBLIC_URL}/{key}"
+    # ── Local disk fallback ────────────────────────────────────────────────────
+    ext = (file.filename or "image.jpg").rsplit(".", 1)[-1].lower()
+    # Only allow safe image extensions
+    if ext not in {"jpg", "jpeg", "png", "gif", "webp", "avif", "heic"}:
+        ext = "jpg"
+    upload_dir = os.path.join(settings.LOCAL_STORAGE_PATH, folder)
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(contents)
+    return f"{settings.LOCAL_STORAGE_URL}/uploads/{folder}/{filename}"
 
 
 def delete_image(url: str) -> None:
-    """Delete an image from R2 by its public URL."""
-    if not settings.R2_ACCOUNT_ID:
+    """Delete an image by its public URL."""
+    if settings.R2_ACCOUNT_ID:
+        key = url.replace(f"{settings.R2_PUBLIC_URL}/", "")
+        _get_r2_client().delete_object(Bucket=settings.R2_BUCKET_NAME, Key=key)
         return
-    key = url.replace(f"{settings.R2_PUBLIC_URL}/", "")
-    client = _get_r2_client()
-    client.delete_object(Bucket=settings.R2_BUCKET_NAME, Key=key)
+
+    # Local disk: derive path from URL
+    prefix = f"{settings.LOCAL_STORAGE_URL}/uploads/"
+    if url.startswith(prefix):
+        rel = url[len(prefix):]
+        filepath = os.path.join(settings.LOCAL_STORAGE_PATH, rel)
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass

@@ -27,12 +27,16 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8081"]
 
-    # Cloudflare R2
+    # Cloudflare R2 (optional — leave blank to use local disk storage)
     R2_ACCOUNT_ID: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "curiocalc-media"
     R2_PUBLIC_URL: str = "https://media.curiocalc.org"
+
+    # Local disk storage (used when R2 is not configured)
+    LOCAL_STORAGE_PATH: str = "/app/uploads"
+    LOCAL_STORAGE_URL: str = "https://api.curiocalc.org"
 
     # Superuser seed
     FIRST_SUPERUSER_EMAIL: str = "admin@curiocalc.org"

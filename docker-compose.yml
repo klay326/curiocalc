@@ -38,6 +38,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - /opt/curiocalc/uploads:/app/uploads
     ports:
       - "8000:8000"
     command: >

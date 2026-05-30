@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from app.config import settings
@@ -37,6 +39,11 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+# Serve locally-uploaded images when R2 is not configured
+if not settings.R2_ACCOUNT_ID:
+    os.makedirs(settings.LOCAL_STORAGE_PATH, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=settings.LOCAL_STORAGE_PATH), name="uploads")
 
 
 @app.get("/api/health", tags=["health"])
