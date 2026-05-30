@@ -18,7 +18,10 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     if hit is not None:
         return hit
 
-    total_calcs   = (await db.execute(select(func.count(Calculator.id)))).scalar() or 0
+    # Count only base models (parent_id IS NULL) — variants are part of the same model
+    total_calcs   = (await db.execute(
+        select(func.count(Calculator.id)).where(Calculator.parent_id.is_(None))
+    )).scalar() or 0
     total_brands  = (await db.execute(select(func.count(distinct(Calculator.make))))).scalar() or 0
     total_users   = (await db.execute(select(func.count(User.id)))).scalar() or 0
     total_owned   = (await db.execute(
@@ -54,9 +57,10 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     )
     decades = [{"decade": int(row.decade), "count": row.cnt} for row in decades_r]
 
-    # Recent additions (last 8)
+    # Recent additions (last 8, base models only)
     recent_r = await db.execute(
         select(Calculator)
+        .where(Calculator.parent_id.is_(None))
         .order_by(Calculator.created_at.desc())
         .limit(8)
     )

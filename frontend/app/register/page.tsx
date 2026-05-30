@@ -97,6 +97,7 @@ export default function RegisterPage() {
   const { setTheme } = useTheme();
   const router = useRouter();
   const [form, setForm] = useState({ email: '', username: '', password: '', display_name: '' });
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [selectedTheme, setSelectedTheme] = useState<Theme>('obsidian');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -112,10 +113,16 @@ export default function RegisterPage() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
 
+  const emailsMatch = form.email === confirmEmail;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordOk) {
       setError('Please choose a stronger password.');
+      return;
+    }
+    if (!emailsMatch) {
+      setError('Email addresses do not match.');
       return;
     }
     setLoading(true);
@@ -132,7 +139,6 @@ export default function RegisterPage() {
   };
 
   const textFields = [
-    { key: 'email',        label: 'Email',                   type: 'email',    required: true },
     { key: 'username',     label: 'Username',                type: 'text',     required: true },
     { key: 'display_name', label: 'Display name (optional)', type: 'text',     required: false },
   ] as const;
@@ -152,6 +158,33 @@ export default function RegisterPage() {
               {error}
             </div>
           )}
+
+          {/* Email */}
+          <div>
+            <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5">Email</label>
+            <input
+              type="email" value={form.email} onChange={set('email')} required
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors"
+            />
+          </div>
+
+          {/* Confirm Email */}
+          <div>
+            <label className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block mb-1.5">Confirm Email</label>
+            <input
+              type="email" value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} required
+              className={`w-full bg-zinc-800 border rounded-lg px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none transition-colors ${
+                confirmEmail.length > 0
+                  ? emailsMatch
+                    ? 'border-green-500/60 focus:border-green-400'
+                    : 'border-red-500/60 focus:border-red-400'
+                  : 'border-zinc-700 focus:border-amber-400'
+              }`}
+            />
+            {confirmEmail.length > 0 && !emailsMatch && (
+              <p className="text-[11px] font-mono text-red-400 mt-1">Emails do not match</p>
+            )}
+          </div>
 
           {textFields.map(({ key, label, type, required }) => (
             <div key={key}>
@@ -201,7 +234,7 @@ export default function RegisterPage() {
           </div>
 
           <button
-            type="submit" disabled={loading || (form.password.length > 0 && !passwordOk)}
+            type="submit" disabled={loading || (form.password.length > 0 && !passwordOk) || (confirmEmail.length > 0 && !emailsMatch)}
             className="w-full bg-amber-400 text-zinc-950 rounded-lg py-2.5 font-mono font-bold text-sm hover:bg-amber-300 transition-colors disabled:opacity-50 mt-2"
           >
             {loading ? 'Creating account…' : 'Create account'}

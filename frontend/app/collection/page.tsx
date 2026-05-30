@@ -170,15 +170,15 @@ function BarChart({ rows, color = 'bg-amber-400' }: { rows: [string, number][]; 
   return (
     <div className="space-y-2">
       {rows.map(([label, count]) => (
-        <div key={label} className="flex items-center gap-3">
-          <span className="text-[10px] font-mono text-zinc-500 w-24 truncate text-right capitalize">{label}</span>
-          <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
+        <div key={label} className="flex items-center gap-3 min-w-0">
+          <span className="text-[10px] font-mono text-zinc-500 w-20 shrink-0 truncate text-right capitalize">{label}</span>
+          <div className="flex-1 min-w-0 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
             <div
               className={`${color} h-1.5 rounded-full transition-all duration-500`}
               style={{ width: `${(count / max) * 100}%` }}
             />
           </div>
-          <span className="text-[10px] font-mono text-zinc-400 w-5 text-right">{count}</span>
+          <span className="text-[10px] font-mono text-zinc-400 w-8 shrink-0 text-right">{count}</span>
         </div>
       ))}
     </div>
