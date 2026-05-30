@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { THEMES, THEME_META, type Theme } from '@/lib/theme';
+import { useTheme, THEMES, THEME_META, type Theme } from '@/lib/theme';
 
 const RULES = [
   { id: 'len',   label: 'At least 8 characters',          test: (p: string) => p.length >= 8 },
@@ -94,11 +94,17 @@ function ThemeSwatch({ t, selected, onSelect }: { t: Theme; selected: boolean; o
 
 export default function RegisterPage() {
   const { login } = useAuth();
+  const { setTheme } = useTheme();
   const router = useRouter();
   const [form, setForm] = useState({ email: '', username: '', password: '', display_name: '' });
   const [selectedTheme, setSelectedTheme] = useState<Theme>('obsidian');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const pickTheme = (t: Theme) => {
+    setSelectedTheme(t);
+    setTheme(t); // live preview
+  };
 
   const passwordScore = RULES.filter(r => r.test(form.password)).length;
   const passwordOk = passwordScore >= 4;
@@ -182,14 +188,14 @@ export default function RegisterPage() {
             <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-1.5">Dark</p>
             <div className="space-y-1 mb-3">
               {DARK_THEMES.map(t => (
-                <ThemeSwatch key={t} t={t} selected={selectedTheme === t} onSelect={() => setSelectedTheme(t)} />
+                <ThemeSwatch key={t} t={t} selected={selectedTheme === t} onSelect={() => pickTheme(t)} />
               ))}
             </div>
 
             <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-1.5">Light</p>
             <div className="space-y-1">
               {LIGHT_THEMES.map(t => (
-                <ThemeSwatch key={t} t={t} selected={selectedTheme === t} onSelect={() => setSelectedTheme(t)} />
+                <ThemeSwatch key={t} t={t} selected={selectedTheme === t} onSelect={() => pickTheme(t)} />
               ))}
             </div>
           </div>
