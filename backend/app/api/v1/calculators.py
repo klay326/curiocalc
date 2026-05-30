@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, distinct, text
 import uuid
 
-from app.api.deps import get_db, get_current_user, get_current_superuser
+from app.api.deps import get_db, get_current_user, get_current_superuser, get_current_staff
 from app.models.user import User
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
@@ -296,7 +296,7 @@ async def get_variants(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 async def create_calculator(
     payload: CalculatorCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_staff),
 ):
     calc = Calculator(**payload.model_dump(), added_by_user_id=current_user.id)
     db.add(calc)
@@ -357,7 +357,7 @@ async def upload_calculator_image(
     calc_id: uuid.UUID,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_staff),
 ):
     result = await db.execute(select(Calculator).where(Calculator.id == calc_id))
     calc = result.scalar_one_or_none()

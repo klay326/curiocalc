@@ -1,13 +1,15 @@
 """Admin-only endpoints — require superuser token."""
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+import uuid
 
 from app.api.deps import get_db, get_current_superuser
 from app.models.user import User
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
+from app.schemas.user import UserAdminEntry, UserAdminUpdate
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -149,3 +151,43 @@ async def admin_stats(
             "most_collected": most_collected,
         },
     }
+
+
+@router.get("/users", response_model=list[UserAdminEntry])
+async def list_users(
+    q: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    stmt = select(User).order_by(User.created_at.desc())
+    if q:
+        like = f"%{q.lower()}%"
+        from sqlalchemy import or_
+        stmt = stmt.where(or_(
+            func.lower(User.username).like(like),
+            func.lower(User.email).like(like),
+            func.lower(func.coalesce(User.display_name, '')).like(like),
+        ))
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+@router.patch("/users/{user_id}", response_model=UserAdminEntry)
+async def update_user_roles(
+    user_id: uuid.UUID,
+    payload: UserAdminUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_superuser),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Prevent self-demotion
+    if target.id == current_admin.id and payload.is_superuser is False:
+        raise HTTPException(status_code=400, detail="Cannot remove your own admin status")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(target, field, value)
+    await db.commit()
+    await db.refresh(target)
+    return target

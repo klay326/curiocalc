@@ -261,17 +261,17 @@ export function Nav() {
                         className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
                         Settings
                       </Link>
+                      {(user.is_superuser || user.is_curator) && (
+                        <Link href="/calculators/new" onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                          + Add calculator
+                        </Link>
+                      )}
                       {user.is_superuser && (
-                        <>
-                          <Link href="/calculators/new" onClick={() => setUserMenuOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
-                            + Add calculator
-                          </Link>
-                          <Link href="/admin" onClick={() => setUserMenuOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
-                            Admin
-                          </Link>
-                        </>
+                        <Link href="/admin" onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                          Admin
+                        </Link>
                       )}
                       <div className="border-t border-zinc-800 my-1" />
                       <button
@@ -384,7 +384,7 @@ export function Nav() {
                     @{user.username}
                   </Link>
                   <Link href="/settings" className={mobileLinkCls('/settings')}>Settings</Link>
-                  {user.is_superuser && <Link href="/calculators/new" className={mobileLinkCls('/calculators/new')}>+ Add calculator</Link>}
+                  {(user.is_superuser || user.is_curator) && <Link href="/calculators/new" className={mobileLinkCls('/calculators/new')}>+ Add calculator</Link>}
                   {user.is_superuser && <Link href="/admin" className={mobileLinkCls('/admin')}>Admin</Link>}
                 </div>
                 <div className="px-4 pt-4">

@@ -51,3 +51,10 @@ async def get_current_superuser(user: User = Depends(get_current_user)) -> User:
     if not user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
     return user
+
+
+async def get_current_staff(user: User = Depends(get_current_user)) -> User:
+    """Superusers and curators — can add/edit calculators."""
+    if not (user.is_superuser or user.is_curator):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+    return user

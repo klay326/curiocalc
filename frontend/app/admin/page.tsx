@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type EditSuggestion, type AdminStats } from '@/lib/api';
+import { api, type Calculator, type EditSuggestion, type AdminStats, type AdminUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions'>('stats');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'users'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -36,8 +36,8 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
-        {(['stats', 'calcs', 'suggestions'] as const).map(t => (
+      <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
+        {(['stats', 'calcs', 'users', 'suggestions'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -45,7 +45,10 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 'stats' ? <StatsTab /> : tab === 'calcs' ? <CalcsTab /> : <SuggestionsTab />}
+      {tab === 'stats' ? <StatsTab />
+       : tab === 'calcs' ? <CalcsTab />
+       : tab === 'users' ? <UsersTab />
+       : <SuggestionsTab />}
     </div>
   );
 }
@@ -531,6 +534,166 @@ function SuggestionsTab() {
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+/* ────────────────────────────────── Users tab ── */
+function UsersTab() {
+  const { user: me } = useAuth();
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [inputVal, setInputVal] = useState('');
+  const [updating, setUpdating] = useState<string | null>(null);
+
+  const load = useCallback(async (q?: string) => {
+    setLoading(true);
+    try { setUsers(await api.admin.users(q || undefined)); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => { setQuery(inputVal); load(inputVal); }, 400);
+    return () => clearTimeout(t);
+  }, [inputVal, load]);
+
+  const toggle = async (user: AdminUser, field: 'is_superuser' | 'is_curator' | 'is_active') => {
+    setUpdating(user.id);
+    try {
+      const updated = await api.admin.updateUser(user.id, { [field]: !user[field] });
+      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const ROLE_BADGE = {
+    admin:   'bg-amber-900/40 text-amber-400 border-amber-800/60',
+    curator: 'bg-blue-900/40 text-blue-400 border-blue-800/60',
+    user:    'bg-zinc-800 text-zinc-500 border-zinc-700',
+  };
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-5">
+        <input
+          type="text" placeholder="Search username, email, display name…"
+          value={inputVal} onChange={e => setInputVal(e.target.value)}
+          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400"
+        />
+        <span className="text-xs text-zinc-600 font-mono flex-shrink-0">{users.length} user{users.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-0 px-4 py-2 bg-zinc-800/40 border-b border-zinc-800">
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">User</span>
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest text-center w-20">Admin</span>
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest text-center w-20">Curator</span>
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest text-center w-20">Active</span>
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest text-right w-24">Joined</span>
+        </div>
+
+        {loading ? (
+          <div className="px-4 py-8 text-center text-zinc-600 font-mono text-sm animate-pulse">Loading…</div>
+        ) : users.length === 0 ? (
+          <div className="px-4 py-8 text-center text-zinc-600 font-mono text-sm">No users found</div>
+        ) : (
+          <div className="divide-y divide-zinc-800/60">
+            {users.map(u => {
+              const isMe = u.id === me?.id;
+              const role = u.is_superuser ? 'admin' : u.is_curator ? 'curator' : 'user';
+              const busy = updating === u.id;
+              return (
+                <div key={u.id} className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-0 px-4 py-3 items-center hover:bg-zinc-800/30 transition-colors ${busy ? 'opacity-60' : ''}`}>
+                  {/* User info */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0">
+                      <span className="text-[11px] font-bold text-zinc-400 font-mono">
+                        {(u.display_name ?? u.username).charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <Link href={`/u/${u.username}`}
+                          className="font-mono text-sm text-zinc-200 hover:text-amber-400 transition-colors truncate">
+                          @{u.username}
+                        </Link>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono flex-shrink-0 ${ROLE_BADGE[role]}`}>
+                          {role}
+                        </span>
+                        {isMe && <span className="text-[9px] text-zinc-600 font-mono flex-shrink-0">you</span>}
+                      </div>
+                      <p className="text-[10px] text-zinc-600 font-mono truncate">{u.email}</p>
+                    </div>
+                  </div>
+
+                  {/* Admin toggle */}
+                  <div className="w-20 flex justify-center">
+                    <button
+                      onClick={() => !isMe && toggle(u, 'is_superuser')}
+                      disabled={busy || isMe}
+                      title={isMe ? "Can't remove your own admin" : u.is_superuser ? 'Remove admin' : 'Make admin'}
+                      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${
+                        u.is_superuser ? 'bg-amber-400' : 'bg-zinc-700'
+                      } disabled:cursor-not-allowed`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${u.is_superuser ? 'left-4' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+
+                  {/* Curator toggle */}
+                  <div className="w-20 flex justify-center">
+                    <button
+                      onClick={() => toggle(u, 'is_curator')}
+                      disabled={busy || u.is_superuser}
+                      title={u.is_superuser ? 'Admins already have curator access' : u.is_curator ? 'Remove curator' : 'Make curator'}
+                      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${
+                        u.is_curator || u.is_superuser ? 'bg-blue-500' : 'bg-zinc-700'
+                      } disabled:cursor-not-allowed`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${u.is_curator || u.is_superuser ? 'left-4' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+
+                  {/* Active toggle */}
+                  <div className="w-20 flex justify-center">
+                    <button
+                      onClick={() => !isMe && toggle(u, 'is_active')}
+                      disabled={busy || isMe}
+                      title={isMe ? "Can't deactivate yourself" : u.is_active ? 'Deactivate' : 'Activate'}
+                      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${
+                        u.is_active ? 'bg-green-600' : 'bg-zinc-700'
+                      } disabled:cursor-not-allowed`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${u.is_active ? 'left-4' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+
+                  {/* Joined date */}
+                  <div className="w-24 text-right">
+                    <span className="text-[10px] text-zinc-600 font-mono">
+                      {new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-1">
+        <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Role reference</p>
+        <p className="text-xs font-mono text-zinc-500"><span className="text-amber-400">Admin</span> — full access: manage users, delete calculators, admin panel</p>
+        <p className="text-xs font-mono text-zinc-500"><span className="text-blue-400">Curator</span> — can add and edit calculators, upload images; no admin panel access</p>
+        <p className="text-xs font-mono text-zinc-500"><span className="text-zinc-400">User</span> — standard: browse, collect, leave reviews, suggest edits</p>
+      </div>
     </>
   );
 }

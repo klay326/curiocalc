@@ -43,7 +43,22 @@ class UserMe(UserPublic):
     email: str
     is_verified: bool
     is_superuser: bool
+    is_curator: bool = False
     theme: str = 'obsidian'
+
+
+class UserAdminUpdate(BaseModel):
+    is_superuser: bool | None = None
+    is_curator: bool | None = None
+    is_active: bool | None = None
+
+
+class UserAdminEntry(UserPublic):
+    email: str
+    is_superuser: bool
+    is_curator: bool
+    is_active: bool
+    created_at: datetime
 
 
 class UserProfile(UserPublic):

@@ -179,6 +179,14 @@ export default function NewCalculatorPage() {
     </div>
   );
 
+  if (!user.is_superuser && !user.is_curator) return (
+    <div className="max-w-lg mx-auto px-4 py-20 text-center">
+      <div className="text-4xl mb-4">🔒</div>
+      <p className="text-zinc-400 font-mono text-sm mb-4">Only admins and curators can add calculators.</p>
+      <Link href="/" className="text-amber-400 hover:text-amber-300 font-mono text-sm">← Browse</Link>
+    </div>
+  );
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
       <div className="mb-8">

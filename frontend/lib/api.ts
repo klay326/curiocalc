@@ -40,8 +40,20 @@ export type AuthUser = {
   website: string | null;
   is_verified: boolean;
   is_superuser: boolean;
+  is_curator: boolean;
   api_key: string | null;
   theme: string;
+};
+
+export type AdminUser = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  email: string;
+  is_superuser: boolean;
+  is_curator: boolean;
+  is_active: boolean;
+  created_at: string;
 };
 
 export type UserProfile = {
@@ -388,6 +400,12 @@ export const api = {
 
   admin: {
     stats: () => request<AdminStats>('/api/v1/admin/stats'),
+    users: (q?: string) => {
+      const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+      return request<AdminUser[]>(`/api/v1/admin/users${qs}`);
+    },
+    updateUser: (id: string, data: { is_superuser?: boolean; is_curator?: boolean; is_active?: boolean }) =>
+      request<AdminUser>(`/api/v1/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
 
   comments: {
