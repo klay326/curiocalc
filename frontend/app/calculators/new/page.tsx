@@ -330,55 +330,64 @@ export default function NewCalculatorPage() {
           <Field label="Tags (comma-separated)" value={form.tags} onChange={set('tags')} placeholder="graphing, school, iconic, TI" />
         </section>
 
-        {/* Variant */}
+        {/* Color & Variant */}
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
           <div>
-            <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Variant / Colorway</h2>
-            <p className="text-[10px] text-zinc-600 font-mono mt-0.5">Optional — use if this is a regional edition, colorway, or revision of an existing model</p>
+            <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Color &amp; Variant</h2>
+            <p className="text-[10px] text-zinc-600 font-mono mt-0.5">Leave blank if this is a one-off or the only version of this model</p>
           </div>
 
-          {parentCalc ? (
-            <div className="flex items-center justify-between bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5">
-              <div>
-                <p className="text-xs font-mono text-zinc-200">{parentCalc.make} {parentCalc.model}</p>
-                <p className="text-[10px] font-mono text-zinc-500">parent model</p>
-              </div>
-              <button type="button" onClick={() => { setParentCalc(null); setParentSearch(''); }}
-                className="text-zinc-600 hover:text-zinc-300 transition-colors text-sm font-mono">
-                ✕ remove
-              </button>
-            </div>
-          ) : (
-            <div className="relative">
-              <input
-                type="text" value={parentSearch}
-                onChange={e => setParentSearch(e.target.value)}
-                placeholder="Search for parent model…"
-                className="input pr-8"
-              />
-              {searching && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs animate-pulse">…</span>
-              )}
-              {parentResults.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden shadow-xl">
-                  {parentResults.map(r => (
-                    <button key={r.id} type="button"
-                      onClick={() => { setParentCalc(r); setParentSearch(''); setParentResults([]); }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 transition-colors text-left">
-                      {r.images[0] && <img src={r.images[0]} alt="" className="w-8 h-8 rounded object-contain bg-zinc-900 flex-shrink-0" />}
-                      <div>
-                        <p className="text-sm font-mono text-zinc-200">{r.make} {r.model}</p>
-                        <p className="text-[10px] font-mono text-zinc-500">{r.year_introduced ?? '?'} · {r.calc_type}</p>
-                      </div>
-                    </button>
-                  ))}
+          <Field label="Color or edition name" value={form.variant_label} onChange={set('variant_label')}
+            placeholder="Black, Rose Gold, Python Edition, UK Version…" />
+
+          {form.variant_label.trim() && (
+            <div>
+              <p className="text-[10px] font-mono text-zinc-500 mb-2">
+                Is this a color/variant of an existing model already in the database?
+                <span className="text-zinc-600"> (leave blank if adding the first/only version)</span>
+              </p>
+
+              {parentCalc ? (
+                <div className="flex items-center justify-between bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5">
+                  <div>
+                    <p className="text-xs font-mono text-zinc-200">{parentCalc.make} {parentCalc.model}</p>
+                    <p className="text-[10px] font-mono text-zinc-500">base model</p>
+                  </div>
+                  <button type="button" onClick={() => { setParentCalc(null); setParentSearch(''); }}
+                    className="text-zinc-600 hover:text-zinc-300 transition-colors text-xs font-mono">
+                    ✕ clear
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text" value={parentSearch}
+                    onChange={e => setParentSearch(e.target.value)}
+                    placeholder="Search for base model…"
+                    className="input pr-8"
+                  />
+                  {searching && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs animate-pulse">…</span>
+                  )}
+                  {parentResults.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden shadow-xl">
+                      {parentResults.map(r => (
+                        <button key={r.id} type="button"
+                          onClick={() => { setParentCalc(r); setParentSearch(''); setParentResults([]); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 transition-colors text-left">
+                          {r.images[0] && <img src={r.images[0]} alt="" className="w-8 h-8 rounded object-contain bg-zinc-900 flex-shrink-0" />}
+                          <div>
+                            <p className="text-sm font-mono text-zinc-200">{r.make} {r.model}</p>
+                            <p className="text-[10px] font-mono text-zinc-500">{r.year_introduced ?? '?'} · {r.calc_type}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
-
-          <Field label="Variant label" value={form.variant_label} onChange={set('variant_label')}
-            placeholder="Silver Edition, UK Version, 1996 Revision…" />
         </section>
 
         <button
