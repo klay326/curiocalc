@@ -30,6 +30,7 @@ export default function CalculatorPage() {
   const [confirmRemoveIdx, setConfirmRemoveIdx] = useState<number | null>(null);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<'owned' | 'wanted'>('owned');
+  const [showAddVariant, setShowAddVariant] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -386,35 +387,74 @@ export default function CalculatorPage() {
       )}
 
       {/* Variants */}
-      {variants.length > 0 && (
+      {(variants.length > 0 || user?.is_superuser) && !calc.parent_id && (
         <div className="mt-8">
-          <h2 className="text-[10px] font-mono text-zinc-600 mb-4 uppercase tracking-widest">
-            Variants &amp; colorways
-            <span className="ml-2 text-zinc-700 normal-case">({variants.length})</span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {variants.map(v => (
-              <Link key={v.id} href={`/calculators/${v.id}`}
-                className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl p-3 hover:border-zinc-600 transition-colors group">
-                <div className="w-12 h-12 flex-shrink-0 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center">
-                  {v.images[0] ? (
-                    <img src={v.images[0]} alt={v.model} className="w-full h-full object-contain" />
-                  ) : (
-                    <span className="text-2xl opacity-20">🧮</span>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-mono text-zinc-200 group-hover:text-amber-400 transition-colors truncate">{v.model}</p>
-                  {v.variant_label && (
-                    <p className="text-xs font-mono text-zinc-500 italic truncate">{v.variant_label}</p>
-                  )}
-                  {v.year_introduced && (
-                    <p className="text-[10px] font-mono text-zinc-600">{v.year_introduced}</p>
-                  )}
-                </div>
-              </Link>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
+              Variants &amp; colorways
+              {variants.length > 0 && <span className="ml-2 text-zinc-700 normal-case">({variants.length})</span>}
+            </h2>
+            {user?.is_superuser && (
+              <button
+                onClick={() => setShowAddVariant(v => !v)}
+                className={`text-xs font-mono px-3 py-1.5 rounded-lg border transition-colors ${
+                  showAddVariant
+                    ? 'border-amber-500/60 text-amber-400 bg-amber-900/20'
+                    : 'border-zinc-700 text-zinc-500 hover:border-amber-500/40 hover:text-amber-400'
+                }`}
+              >
+                {showAddVariant ? '✕ cancel' : '+ Add variant'}
+              </button>
+            )}
           </div>
+
+          {showAddVariant && calc && (
+            <AddVariantForm
+              parent={calc}
+              onAdded={(v) => {
+                setVariants(prev => [...prev, v]);
+                setShowAddVariant(false);
+              }}
+              onCancel={() => setShowAddVariant(false)}
+            />
+          )}
+
+          {variants.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {variants.map(v => (
+                <div key={v.id} className="group/vcard relative">
+                  <Link href={`/calculators/${v.id}`}
+                    className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl p-3 hover:border-zinc-600 transition-colors group">
+                    <div className="w-12 h-12 flex-shrink-0 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center">
+                      {v.images[0] ? (
+                        <img src={v.images[0]} alt={v.model} className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-2xl opacity-20">🧮</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-mono text-zinc-200 group-hover:text-amber-400 transition-colors truncate">{v.variant_label ?? v.model}</p>
+                      {v.year_introduced && (
+                        <p className="text-[10px] font-mono text-zinc-600">{v.year_introduced}</p>
+                      )}
+                    </div>
+                  </Link>
+                  {user?.is_superuser && (
+                    <Link
+                      href={`/calculators/${v.id}`}
+                      className="absolute top-2 right-2 opacity-0 group-hover/vcard:opacity-100 transition-opacity text-[10px] font-mono text-amber-500 hover:text-amber-300 bg-zinc-900 border border-amber-900/50 px-1.5 py-0.5 rounded"
+                    >
+                      edit ↗
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {variants.length === 0 && !showAddVariant && user?.is_superuser && (
+            <p className="text-zinc-700 font-mono text-xs italic">No variants yet — click "+ Add variant" above to create one.</p>
+          )}
         </div>
       )}
 
@@ -504,12 +544,126 @@ export default function CalculatorPage() {
           {showAdminEdit && (
             <AdminEditPanel
               calc={calc}
+              variants={variants}
               onSaved={updated => { setCalc(updated); setShowAdminEdit(false); }}
               onDeleted={() => router.push('/')}
+              onVariantAdded={v => setVariants(prev => [...prev, v])}
+              onVariantDeleted={id => setVariants(prev => prev.filter(v => v.id !== id))}
             />
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Add Variant Form ────────────────────────────────────────────────────────
+
+function AddVariantForm({
+  parent,
+  onAdded,
+  onCancel,
+}: {
+  parent: Calculator;
+  onAdded: (v: Calculator) => void;
+  onCancel: () => void;
+}) {
+  const [label, setLabel]       = useState('');
+  const [imageUrls, setImageUrls] = useState('');
+  const [yearIn, setYearIn]     = useState(String(parent.year_introduced ?? ''));
+  const [yearOut, setYearOut]   = useState(String(parent.year_discontinued ?? ''));
+  const [country, setCountry]   = useState(parent.country_of_origin ?? '');
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    if (!label.trim()) { setError('Variant label is required.'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const images = imageUrls
+        .split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
+      const payload: Record<string, unknown> = {
+        make:              parent.make,
+        model:             parent.model,
+        calc_type:         parent.calc_type,
+        display_type:      parent.display_type,
+        power_source:      parent.power_source,
+        num_keys:          parent.num_keys,
+        country_of_origin: country.trim() || parent.country_of_origin,
+        year_introduced:   yearIn  ? parseInt(yearIn)  : parent.year_introduced,
+        year_discontinued: yearOut ? parseInt(yearOut) : parent.year_discontinued,
+        tags:              parent.tags,
+        parent_id:         parent.id,
+        variant_label:     label.trim(),
+        images:            images.length ? images : (parent.images.length ? [parent.images[0]] : []),
+        rarity_score:      parent.rarity_score,
+        weirdness_score:   parent.weirdness_score,
+      };
+      const created = await api.calculators.create(payload as Partial<Calculator>);
+      onAdded(created);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create variant');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-zinc-900 border border-amber-900/40 rounded-xl p-4 mb-4 space-y-3">
+      <p className="text-[10px] font-mono text-amber-400 uppercase tracking-widest">New variant of {parent.make} {parent.model}</p>
+      {error && <p className="text-red-400 font-mono text-xs">{error}</p>}
+
+      <div>
+        <label className="text-[10px] font-mono text-zinc-500 block mb-1">Variant label <span className="text-red-500">*</span></label>
+        <input
+          value={label} onChange={e => setLabel(e.target.value)}
+          placeholder="e.g. Red, Silver edition, UK version, Rev. 2…"
+          autoFocus
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[10px] font-mono text-zinc-500 block mb-1">Year introduced</label>
+          <input value={yearIn} onChange={e => setYearIn(e.target.value)} placeholder={String(parent.year_introduced ?? '—')}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors" />
+        </div>
+        <div>
+          <label className="text-[10px] font-mono text-zinc-500 block mb-1">Year discontinued</label>
+          <input value={yearOut} onChange={e => setYearOut(e.target.value)} placeholder={String(parent.year_discontinued ?? '—')}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors" />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-[10px] font-mono text-zinc-500 block mb-1">Country of origin</label>
+        <input value={country} onChange={e => setCountry(e.target.value)} placeholder={parent.country_of_origin ?? '—'}
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors" />
+      </div>
+
+      <div>
+        <label className="text-[10px] font-mono text-zinc-500 block mb-1">
+          Image URLs <span className="text-zinc-700 normal-case">(one per line — leave blank to inherit parent image)</span>
+        </label>
+        <textarea
+          value={imageUrls} onChange={e => setImageUrls(e.target.value)}
+          placeholder="https://…"
+          rows={2}
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-xs focus:outline-none focus:border-amber-400 transition-colors resize-none"
+        />
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button onClick={onCancel}
+          className="px-4 py-2 bg-zinc-800 text-zinc-400 rounded-lg font-mono text-sm hover:bg-zinc-700 border border-zinc-700 transition-colors">
+          Cancel
+        </button>
+        <button onClick={handleCreate} disabled={saving || !label.trim()}
+          className="px-4 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
+          {saving ? 'Creating…' : '✓ Create variant'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -550,18 +704,27 @@ function TextInput({ value, onChange, placeholder }: { value: string; onChange: 
 
 function AdminEditPanel({
   calc,
+  variants,
   onSaved,
   onDeleted,
+  onVariantAdded,
+  onVariantDeleted,
 }: {
   calc: Calculator;
+  variants: Calculator[];
   onSaved: (updated: Calculator) => void;
   onDeleted: () => void;
+  onVariantAdded: (v: Calculator) => void;
+  onVariantDeleted: (id: string) => void;
 }) {
-  const [saving, setSaving]       = useState(false);
-  const [deleting, setDeleting]   = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [deleting, setDeleting]     = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  const [success, setSuccess]     = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+  const [success, setSuccess]       = useState(false);
+  const [showVariantAdder, setShowVariantAdder] = useState(false);
+  const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
+  const [localVariants, setLocalVariants] = useState<Calculator[]>(variants);
 
   // Editable fields mirroring the Calculator model
   const [make, setMake]                   = useState(calc.make);
@@ -871,6 +1034,87 @@ function AdminEditPanel({
           </span>
         </label>
       </section>
+
+      {/* ── Variants (only shown on base models, not on variant entries) ── */}
+      {!calc.parent_id && (
+        <section>
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-1 mb-3">
+            <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest">Variants &amp; colorways</p>
+            <button
+              onClick={() => setShowVariantAdder(v => !v)}
+              className="text-[10px] font-mono text-amber-500 hover:text-amber-300 transition-colors"
+            >
+              {showVariantAdder ? '✕ cancel' : '+ add variant'}
+            </button>
+          </div>
+
+          {showVariantAdder && (
+            <AddVariantForm
+              parent={calc}
+              onAdded={v => {
+                const updated = [...localVariants, v];
+                setLocalVariants(updated);
+                onVariantAdded(v);
+                setShowVariantAdder(false);
+              }}
+              onCancel={() => setShowVariantAdder(false)}
+            />
+          )}
+
+          {localVariants.length === 0 && !showVariantAdder && (
+            <p className="text-zinc-700 font-mono text-xs italic mb-2">No variants yet.</p>
+          )}
+
+          {localVariants.length > 0 && (
+            <div className="space-y-2 mb-2">
+              {localVariants.map(v => (
+                <div key={v.id} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
+                  <div className="w-8 h-8 flex-shrink-0 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                    {v.images[0]
+                      ? <img src={v.images[0]} alt="" className="w-full h-full object-contain" />
+                      : <span className="text-sm opacity-20">🧮</span>
+                    }
+                  </div>
+                  <span className="flex-1 text-xs font-mono text-zinc-300 truncate">
+                    {v.variant_label ?? v.model}
+                    {v.year_introduced && <span className="text-zinc-600 ml-2">{v.year_introduced}</span>}
+                  </span>
+                  <Link href={`/calculators/${v.id}`}
+                    className="text-[10px] font-mono text-amber-500 hover:text-amber-300 transition-colors flex-shrink-0 px-2">
+                    edit ↗
+                  </Link>
+                  {deletingVariantId === v.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-red-400">Sure?</span>
+                      <button
+                        onClick={() => setDeletingVariantId(null)}
+                        className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-700"
+                      >no</button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.calculators.delete(v.id);
+                            const next = localVariants.filter(lv => lv.id !== v.id);
+                            setLocalVariants(next);
+                            onVariantDeleted(v.id);
+                          } catch {}
+                          setDeletingVariantId(null);
+                        }}
+                        className="text-[10px] font-mono text-white bg-red-600 hover:bg-red-500 px-1.5 py-0.5 rounded"
+                      >yes</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeletingVariantId(v.id)}
+                      className="text-[10px] font-mono text-zinc-700 hover:text-red-400 transition-colors flex-shrink-0"
+                    >🗑</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Actions ── */}
       <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
