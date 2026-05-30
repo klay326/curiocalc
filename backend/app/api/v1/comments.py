@@ -10,6 +10,7 @@ from app.models.collection import CollectionEntry
 from app.models.calculator import Calculator
 from app.models.notification import Notification
 from app.schemas.comment import CommentCreate, CommentPublic
+from app.services.email import send_comment_email
 
 router = APIRouter(tags=["comments"])
 
@@ -65,7 +66,8 @@ async def create_comment(
     calc = calc_r.scalar_one_or_none()
     if calc:
         owners_r = await db.execute(
-            select(CollectionEntry.user_id)
+            select(CollectionEntry.user_id, User.email)
+            .join(User, User.id == CollectionEntry.user_id)
             .where(
                 CollectionEntry.calculator_id == calc_id,
                 CollectionEntry.status == "owned",
@@ -73,8 +75,9 @@ async def create_comment(
             )
             .limit(20)
         )
-        owner_ids = [row[0] for row in owners_r.all()]
-        for uid in owner_ids:
+        owner_rows = owners_r.all()
+        snippet = payload.content[:120] if payload.content else ""
+        for uid, owner_email in owner_rows:
             db.add(Notification(
                 user_id=uid,
                 type="comment",
@@ -85,10 +88,19 @@ async def create_comment(
                 calc_id=calc.id,
                 calc_make=calc.make,
                 calc_model=calc.model,
-                body=payload.content[:120] if payload.content else None,
+                body=snippet or None,
             ))
-        if owner_ids:
+        if owner_rows:
             await db.commit()
+            for _, owner_email in owner_rows:
+                await send_comment_email(
+                    owner_email,
+                    current_user.username,
+                    calc.make,
+                    calc.model,
+                    str(calc_id),
+                    snippet,
+                )
 
     return _to_public(comment, current_user)
 

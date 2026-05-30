@@ -37,6 +37,7 @@ export default function HomePage() {
 
   const [makes, setMakes]     = useState<string[]>([]);
   const [showMakes, setShowMakes] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const makesRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -157,14 +158,12 @@ export default function HomePage() {
         <div className="mb-8">
           {/* Stats row */}
           {stats && (
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
               {[
-                { label: 'Calculators', value: stats.total_calcs.toLocaleString() },
-                { label: 'Brands',      value: stats.total_brands.toLocaleString() },
-                { label: 'Members',     value: stats.total_users.toLocaleString() },
-                { label: 'In Collections', value: stats.total_owned.toLocaleString() },
-                { label: 'With Photos', value: stats.with_images.toLocaleString() },
-                { label: 'Described',   value: stats.with_descriptions.toLocaleString() },
+                { label: 'Calculators',    value: stats.total_calcs.toLocaleString() },
+                { label: 'Brands',         value: stats.total_brands.toLocaleString() },
+                { label: 'Members',        value: stats.total_users.toLocaleString() },
+                { label: 'In collections', value: stats.total_owned.toLocaleString() },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-center">
                   <p className="text-lg font-bold font-mono text-amber-400">{value}</p>
@@ -174,77 +173,51 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Featured calc + quick links */}
-          <div className="grid md:grid-cols-3 gap-4 mb-8">
-            {/* Featured / random */}
-            <div className="md:col-span-1 bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">🎲 Random pick</p>
-                <button
-                  onClick={() => {
-                    setFeaturedLoading(true);
-                    api.calculators.random().then(setFeatured).catch(() => {}).finally(() => setFeaturedLoading(false));
-                  }}
-                  className="text-[10px] font-mono text-zinc-600 hover:text-amber-400 transition-colors"
-                >
-                  shuffle ↺
-                </button>
-              </div>
-              {featuredLoading ? (
-                <div className="flex-1 animate-pulse space-y-2">
-                  <div className="aspect-video bg-zinc-800 rounded-lg" />
-                  <div className="h-3 bg-zinc-800 rounded w-1/2" />
-                  <div className="h-4 bg-zinc-800 rounded w-3/4" />
+          {/* Featured / random — compact strip */}
+          {featured && !featuredLoading && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 mb-8">
+              <Link href={`/calculators/${featured.id}`} className="flex-shrink-0">
+                <div className="w-20 h-20 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center">
+                  {featured.images[0] ? (
+                    <img src={featured.images[0]} alt={featured.model} className="w-full h-full object-contain" />
+                  ) : (
+                    <span className="text-3xl opacity-20">🧮</span>
+                  )}
                 </div>
-              ) : featured ? (
-                <Link href={`/calculators/${featured.id}`} className="group flex-1 flex flex-col">
-                  <div className="aspect-video bg-zinc-800 rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                    {featured.images[0] ? (
-                      <img src={featured.images[0]} alt={featured.model}
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
-                    ) : (
-                      <span className="text-4xl opacity-20">🧮</span>
-                    )}
-                  </div>
+              </Link>
+              <div className="flex-1 min-w-0">
+                <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-0.5">🎲 Random pick</p>
+                <Link href={`/calculators/${featured.id}`} className="group">
                   <p className="text-[10px] text-zinc-500 font-mono">{featured.make}</p>
-                  <p className="font-bold text-sm text-zinc-100 group-hover:text-amber-400 transition-colors leading-tight">
+                  <p className="font-bold font-mono text-zinc-100 group-hover:text-amber-400 transition-colors leading-tight">
                     {featured.model}
                   </p>
                   {featured.year_introduced && (
                     <p className="text-[10px] text-zinc-600 font-mono mt-0.5">{featured.year_introduced}</p>
                   )}
                 </Link>
-              ) : null}
+              </div>
+              <button
+                onClick={() => {
+                  setFeaturedLoading(true);
+                  api.calculators.random().then(setFeatured).catch(() => {}).finally(() => setFeaturedLoading(false));
+                }}
+                className="text-[10px] font-mono text-zinc-600 hover:text-amber-400 transition-colors flex-shrink-0 px-2 py-1"
+              >
+                shuffle ↺
+              </button>
             </div>
-
-            {/* Quick links */}
-            <div className="md:col-span-2 grid grid-cols-2 gap-3">
-              <Link href="/brands"
-                className="group bg-zinc-900 border border-zinc-800 hover:border-amber-400/40 rounded-xl p-4 transition-colors">
-                <div className="text-2xl mb-2">🏭</div>
-                <p className="font-bold font-mono text-sm text-zinc-100 group-hover:text-amber-400 transition-colors">Browse Brands</p>
-                <p className="text-[11px] text-zinc-600 font-mono mt-0.5">{stats?.total_brands ?? '…'} manufacturers</p>
-              </Link>
-              <Link href="/timeline"
-                className="group bg-zinc-900 border border-zinc-800 hover:border-amber-400/40 rounded-xl p-4 transition-colors">
-                <div className="text-2xl mb-2">📅</div>
-                <p className="font-bold font-mono text-sm text-zinc-100 group-hover:text-amber-400 transition-colors">Timeline</p>
-                <p className="text-[11px] text-zinc-600 font-mono mt-0.5">History by decade</p>
-              </Link>
-              <Link href="/compare"
-                className="group bg-zinc-900 border border-zinc-800 hover:border-amber-400/40 rounded-xl p-4 transition-colors">
-                <div className="text-2xl mb-2">⚖️</div>
-                <p className="font-bold font-mono text-sm text-zinc-100 group-hover:text-amber-400 transition-colors">Compare</p>
-                <p className="text-[11px] text-zinc-600 font-mono mt-0.5">Side-by-side specs</p>
-              </Link>
-              <Link href="/calculators/new"
-                className="group bg-zinc-900 border border-zinc-800 hover:border-amber-400/40 rounded-xl p-4 transition-colors">
-                <div className="text-2xl mb-2">➕</div>
-                <p className="font-bold font-mono text-sm text-zinc-100 group-hover:text-amber-400 transition-colors">Add a Calc</p>
-                <p className="text-[11px] text-zinc-600 font-mono mt-0.5">Grow the database</p>
-              </Link>
+          )}
+          {featuredLoading && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 mb-8 animate-pulse">
+              <div className="w-20 h-20 bg-zinc-800 rounded-lg flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-2 bg-zinc-800 rounded w-1/4" />
+                <div className="h-4 bg-zinc-800 rounded w-1/2" />
+                <div className="h-2 bg-zinc-800 rounded w-1/5" />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Recent additions */}
           {stats && stats.recent.length > 0 && (
@@ -272,58 +245,107 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Type filters */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        <button onClick={() => setSelectedType(null)}
-          className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
-            !selectedType ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
-          }`}>all</button>
-        {TYPES.map(t => (
-          <button key={t} onClick={() => setSelectedType(t === selectedType ? null : t)}
-            className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
-              selectedType === t ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
-            }`}>{t}</button>
-        ))}
-      </div>
-
-      {/* Decade + make row */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <span className="text-[10px] text-zinc-600 font-mono self-center uppercase tracking-wider">decade:</span>
-        {DECADES.map(d => (
-          <button key={d} onClick={() => setSelectedDecade(d === selectedDecade ? null : d)}
-            className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
-              selectedDecade === d ? 'bg-zinc-700 text-zinc-100 border-zinc-500 font-bold' : 'text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
-            }`}>{d}s</button>
-        ))}
-
-        <div className="relative ml-2" ref={makesRef}>
-          <button onClick={() => setShowMakes(v => !v)}
-            className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
-              selectedMake ? 'bg-zinc-700 text-zinc-100 border-zinc-500 font-bold' : 'text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
-            }`}>
-            {selectedMake ?? 'brand ▾'}
+      {/* Filters toggle */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            onClick={() => setFiltersOpen(v => !v)}
+            className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-full border transition-colors ${
+              activeFilterCount > 0
+                ? 'border-amber-400/40 text-amber-400 bg-amber-400/5'
+                : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {filtersOpen ? '▲' : '▼'} Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
           </button>
-          {showMakes && (
-            <div className="absolute top-full left-0 mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-2 min-w-[180px] max-h-72 overflow-y-auto">
-              <button onClick={() => { setSelectedMake(null); setShowMakes(false); }}
-                className="w-full text-left text-xs px-3 py-1.5 rounded font-mono text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
-                All brands
-              </button>
-              {makes.map(m => (
-                <button key={m} onClick={() => { setSelectedMake(m); setShowMakes(false); }}
-                  className={`w-full text-left text-xs px-3 py-1.5 rounded font-mono transition-colors ${
-                    selectedMake === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-                  }`}>{m}</button>
-              ))}
-            </div>
+          {/* Active filter chips */}
+          {selectedType && (
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-400 flex items-center gap-1">
+              {selectedType}
+              <button onClick={() => setSelectedType(null)} className="hover:text-amber-200 leading-none">✕</button>
+            </span>
+          )}
+          {selectedDecade && (
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-zinc-700/50 border border-zinc-600 text-zinc-300 flex items-center gap-1">
+              {selectedDecade}s
+              <button onClick={() => setSelectedDecade(null)} className="hover:text-zinc-100 leading-none">✕</button>
+            </span>
+          )}
+          {selectedMake && (
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-zinc-700/50 border border-zinc-600 text-zinc-300 flex items-center gap-1">
+              {selectedMake}
+              <button onClick={() => setSelectedMake(null)} className="hover:text-zinc-100 leading-none">✕</button>
+            </span>
+          )}
+          {activeFilterCount > 0 && (
+            <button
+              onClick={() => { setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); }}
+              className="text-xs font-mono text-zinc-600 hover:text-red-400 transition-colors ml-auto"
+            >
+              clear all
+            </button>
           )}
         </div>
 
-        {activeFilterCount > 0 && (
-          <button onClick={() => { setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); }}
-            className="text-xs px-3 py-1.5 rounded-full font-mono border border-red-900/50 text-red-400 hover:bg-red-900/20 transition-colors ml-auto">
-            ✕ clear filters
-          </button>
+        {filtersOpen && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-4">
+            {/* Type */}
+            <div>
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">Type</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setSelectedType(null)}
+                  className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                    !selectedType ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+                  }`}>all</button>
+                {TYPES.map(t => (
+                  <button key={t} onClick={() => setSelectedType(t === selectedType ? null : t)}
+                    className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                      selectedType === t ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+                    }`}>{t}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Decade */}
+            <div>
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">Decade</p>
+              <div className="flex flex-wrap gap-1.5">
+                {DECADES.map(d => (
+                  <button key={d} onClick={() => setSelectedDecade(d === selectedDecade ? null : d)}
+                    className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                      selectedDecade === d ? 'bg-zinc-700 text-zinc-100 border-zinc-500 font-bold' : 'text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
+                    }`}>{d}s</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Brand */}
+            <div ref={makesRef}>
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">Brand</p>
+              <div className="relative">
+                <button onClick={() => setShowMakes(v => !v)}
+                  className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                    selectedMake ? 'bg-zinc-700 text-zinc-100 border-zinc-500 font-bold' : 'text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
+                  }`}>
+                  {selectedMake ?? 'Select brand ▾'}
+                </button>
+                {showMakes && (
+                  <div className="absolute top-full left-0 mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-2 min-w-[180px] max-h-60 overflow-y-auto">
+                    <button onClick={() => { setSelectedMake(null); setShowMakes(false); }}
+                      className="w-full text-left text-xs px-3 py-1.5 rounded font-mono text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                      All brands
+                    </button>
+                    {makes.map(m => (
+                      <button key={m} onClick={() => { setSelectedMake(m); setShowMakes(false); }}
+                        className={`w-full text-left text-xs px-3 py-1.5 rounded font-mono transition-colors ${
+                          selectedMake === m ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+                        }`}>{m}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

@@ -195,6 +195,58 @@ async def list_tags(db: AsyncSession = Depends(get_db)):
     return sorted(tag_set)
 
 
+@router.get("/batch", response_model=list[CalculatorPublic])
+async def batch_get_calculators(
+    ids: str = Query(..., description="Comma-separated calculator IDs"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch multiple calculators by ID in a single request."""
+    id_list = []
+    for raw in ids.split(","):
+        raw = raw.strip()
+        if raw:
+            try:
+                id_list.append(uuid.UUID(raw))
+            except ValueError:
+                pass
+    if not id_list:
+        return []
+
+    result = await db.execute(select(Calculator).where(Calculator.id.in_(id_list)))
+    calcs = result.scalars().all()
+    if not calcs:
+        return []
+
+    calc_ids = [c.id for c in calcs]
+    counts_r = await db.execute(
+        select(
+            CollectionEntry.calculator_id,
+            func.count(CollectionEntry.id).filter(CollectionEntry.status == "owned").label("owner_count"),
+            func.count(CollectionEntry.id).filter(CollectionEntry.status == "wanted").label("want_count"),
+        )
+        .where(CollectionEntry.calculator_id.in_(calc_ids))
+        .group_by(CollectionEntry.calculator_id)
+    )
+    counts_map = {row.calculator_id: (row.owner_count, row.want_count) for row in counts_r}
+
+    variants_r = await db.execute(
+        select(Calculator.parent_id, func.count(Calculator.id).label("cnt"))
+        .where(Calculator.parent_id.in_(calc_ids))
+        .group_by(Calculator.parent_id)
+    )
+    variants_map = {row.parent_id: row.cnt for row in variants_r}
+
+    out = []
+    for calc in calcs:
+        owner_count, want_count = counts_map.get(calc.id, (0, 0))
+        d = {c.key: getattr(calc, c.key) for c in calc.__table__.columns}
+        d["owner_count"] = owner_count
+        d["want_count"] = want_count
+        d["variant_count"] = variants_map.get(calc.id, 0)
+        out.append(CalculatorPublic.model_validate(d))
+    return out
+
+
 @router.get("/related/{calc_id}", response_model=list[CalculatorPublic])
 async def get_related(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Calculator).where(Calculator.id == calc_id))

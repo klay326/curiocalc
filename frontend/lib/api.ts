@@ -281,6 +281,10 @@ export const api = {
       return request<Calculator[]>(`/api/v1/calculators?${query}`);
     },
     get: (id: string) => request<Calculator>(`/api/v1/calculators/${id}`),
+    batch: (ids: string[]) => {
+      if (!ids.length) return Promise.resolve([] as Calculator[]);
+      return request<Calculator[]>(`/api/v1/calculators/batch?ids=${ids.join(',')}`);
+    },
     variants: (id: string) => request<Calculator[]>(`/api/v1/calculators/${id}/variants`),
     related: (id: string) => request<Calculator[]>(`/api/v1/calculators/related/${id}`),
     makes: () => request<string[]>('/api/v1/calculators/makes'),

@@ -11,6 +11,7 @@ from app.models.collection import CollectionEntry
 from app.models.calculator import Calculator
 from app.models.notification import Notification
 from app.schemas.user import UserPublic
+from app.services.email import send_follow_email
 
 router = APIRouter(tags=["follows"])
 
@@ -31,17 +32,20 @@ async def follow_user(
     db.add(Follow(follower_id=me.id, following_id=target.id))
     try:
         await db.commit()
-        db.add(Notification(
-            user_id=target.id,
-            type="follow",
-            actor_id=me.id,
-            actor_username=me.username,
-            actor_display_name=me.display_name,
-            actor_avatar_url=me.avatar_url,
-        ))
-        await db.commit()
     except IntegrityError:
-        await db.rollback()  # already following — treat as no-op
+        await db.rollback()
+        return  # already following — treat as no-op
+
+    db.add(Notification(
+        user_id=target.id,
+        type="follow",
+        actor_id=me.id,
+        actor_username=me.username,
+        actor_display_name=me.display_name,
+        actor_avatar_url=me.avatar_url,
+    ))
+    await db.commit()
+    await send_follow_email(target.email, me.username, me.display_name)
 
 
 @router.delete("/users/{username}/follow", status_code=status.HTTP_204_NO_CONTENT)

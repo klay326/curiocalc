@@ -153,8 +153,10 @@ export function Nav() {
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const [showPicker, setShowPicker] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Close picker on outside click
   useEffect(() => {
@@ -165,8 +167,17 @@ export function Nav() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showPicker]);
 
-  // Close mobile menu on navigation
-  useEffect(() => { setMenuOpen(false); }, [pathname]);
+  // Close user menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
+    };
+    if (userMenuOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [userMenuOpen]);
+
+  // Close menus on navigation
+  useEffect(() => { setMenuOpen(false); setUserMenuOpen(false); }, [pathname]);
 
   const isActive = useCallback((href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href), [pathname]);
@@ -177,12 +188,16 @@ export function Nav() {
   const mobileLinkCls = (href: string) =>
     `block px-4 py-3 font-mono text-sm transition-colors border-b border-zinc-800/60 ${isActive(href) ? 'text-amber-400 bg-amber-400/5' : 'text-zinc-300 hover:bg-zinc-800/50'}`;
 
-  const publicLinks = [
+  const primaryLinks = [
     { href: '/', label: 'Browse' },
     { href: '/brands', label: 'Brands' },
     { href: '/trending', label: 'Trending' },
     { href: '/trade', label: 'Trade' },
-    { href: '/top', label: 'Top' },
+  ];
+
+  const moreLinks = [
+    { href: '/timeline', label: 'Timeline' },
+    { href: '/top', label: 'Top collectors' },
     { href: '/compare', label: 'Compare' },
     { href: '/contribute', label: 'Contribute' },
   ];
@@ -199,24 +214,67 @@ export function Nav() {
 
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-5">
-            {publicLinks.map(({ href, label }) => (
+            {primaryLinks.map(({ href, label }) => (
               <Link key={href} href={href} className={linkCls(href)}>{label}</Link>
             ))}
 
             {user ? (
               <>
-                <Link href="/feed" className={linkCls('/feed')}>Feed</Link>
-                <Link href="/collection" className={linkCls('/collection')}>Collection</Link>
-                {user.is_superuser && <Link href="/calculators/new" className={linkCls('/calculators/new')}>+ Add</Link>}
-                {user.is_superuser && <Link href="/admin" className={linkCls('/admin')}>Admin</Link>}
-                <Link href={`/u/${user.username}`} className={linkCls(`/u/${user.username}`)}>
-                  @{user.username}
-                </Link>
                 <NotificationBell />
-                <Link href="/settings" className={linkCls('/settings')}>⚙</Link>
-                <button onClick={logout} className="text-sm font-mono text-zinc-500 hover:text-zinc-300 transition-colors">
-                  Sign out
-                </button>
+                {/* User dropdown */}
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    onClick={() => setUserMenuOpen(v => !v)}
+                    className={`flex items-center gap-1 text-sm font-mono transition-colors ${
+                      userMenuOpen ? 'text-amber-400' : 'text-zinc-400 hover:text-zinc-100'
+                    }`}
+                  >
+                    @{user.username}
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" className="opacity-50">
+                      <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                  {userMenuOpen && (
+                    <div className="absolute right-0 top-9 w-44 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
+                      <Link href={`/u/${user.username}`} onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                        Profile
+                      </Link>
+                      <Link href="/collection" onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                        Collection
+                      </Link>
+                      <Link href="/feed" onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                        Feed
+                      </Link>
+                      <div className="border-t border-zinc-800 my-1" />
+                      <Link href="/settings" onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                        Settings
+                      </Link>
+                      {user.is_superuser && (
+                        <>
+                          <Link href="/calculators/new" onClick={() => setUserMenuOpen(false)}
+                            className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                            + Add calculator
+                          </Link>
+                          <Link href="/admin" onClick={() => setUserMenuOpen(false)}
+                            className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                            Admin
+                          </Link>
+                        </>
+                      )}
+                      <div className="border-t border-zinc-800 my-1" />
+                      <button
+                        onClick={() => { logout(); setUserMenuOpen(false); }}
+                        className="w-full text-left px-4 py-2 text-xs font-mono text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <>
@@ -300,9 +358,14 @@ export function Nav() {
       {menuOpen && (
         <div className="md:hidden fixed inset-0 top-14 z-40 bg-zinc-950/95 backdrop-blur-sm overflow-y-auto">
           <div className="pb-8">
-            {publicLinks.map(({ href, label }) => (
+            {primaryLinks.map(({ href, label }) => (
               <Link key={href} href={href} className={mobileLinkCls(href)}>{label}</Link>
             ))}
+            <div className="border-t border-zinc-800 mt-1 pt-1">
+              {moreLinks.map(({ href, label }) => (
+                <Link key={href} href={href} className={mobileLinkCls(href)}>{label}</Link>
+              ))}
+            </div>
 
             {user ? (
               <>

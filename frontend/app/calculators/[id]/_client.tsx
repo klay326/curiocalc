@@ -19,8 +19,8 @@ export default function CalculatorPage() {
   const [parentCalc, setParentCalc] = useState<Calculator | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
-  const [existingEntry, setExistingEntry] = useState<CollectionEntry | null>(null);
-  const [removingEntry, setRemovingEntry] = useState(false);
+  const [myEntries, setMyEntries] = useState<CollectionEntry[]>([]);
+  const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
   const [showAdminEdit, setShowAdminEdit] = useState(false);
@@ -53,16 +53,16 @@ export default function CalculatorPage() {
       .finally(() => setLoading(false));
   }, [id, router]);
 
-  // Load the user's existing collection entry for this calc
+  // Load the user's collection entries for this calc family (parent + all variants)
   useEffect(() => {
-    if (!user) { setExistingEntry(null); return; }
+    if (!user) { setMyEntries([]); return; }
     api.collection.mine()
       .then(entries => {
-        const match = entries.find(e => e.calculator_id === id) ?? null;
-        setExistingEntry(match);
+        const familyIds = new Set([id, ...variants.map(v => v.id)]);
+        setMyEntries(entries.filter(e => familyIds.has(e.calculator_id)));
       })
       .catch(() => {});
-  }, [id, user]);
+  }, [id, user, variants]);
 
 
   const removeImageDirect = async (index: number) => {
@@ -83,14 +83,13 @@ export default function CalculatorPage() {
     setShowCollectionModal(true);
   };
 
-  const removeFromCollection = async () => {
-    if (!existingEntry) return;
-    setRemovingEntry(true);
+  const removeEntry = async (entryId: string) => {
+    setRemovingEntryId(entryId);
     try {
-      await api.collection.remove(existingEntry.id);
-      setExistingEntry(null);
+      await api.collection.remove(entryId);
+      setMyEntries(prev => prev.filter(e => e.id !== entryId));
     } catch (e) { console.error(e); }
-    finally { setRemovingEntry(false); }
+    finally { setRemovingEntryId(null); }
   };
 
   if (loading) return (
@@ -239,36 +238,55 @@ export default function CalculatorPage() {
           {yearRange && <p className="text-zinc-500 font-mono text-sm mb-5">{yearRange}</p>}
 
           {/* Add to collection */}
-          <div className="flex gap-2 mb-5">
-            {existingEntry ? (
-              <>
-                <div className={`px-4 py-2.5 rounded-lg font-mono text-sm border ${
-                  existingEntry.status === 'owned'
-                    ? 'bg-amber-400/10 text-amber-400 border-amber-400/20'
-                    : 'bg-zinc-800 text-zinc-300 border-zinc-700'
-                }`}>
-                  {existingEntry.status === 'owned' ? '🧮 In collection' : '⭐ On wishlist'}
-                </div>
-                <button
-                  onClick={removeFromCollection}
-                  disabled={removingEntry}
-                  className="px-3 py-2.5 bg-zinc-900 text-zinc-500 hover:text-red-400 hover:border-red-900/50 rounded-lg font-mono text-sm border border-zinc-800 transition-colors disabled:opacity-50"
-                  title="Remove from collection">
-                  {removingEntry ? '…' : '✕'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button onClick={() => openCollectionModal('owned')} disabled={adding}
-                  className="px-4 py-2.5 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
-                  I own this
-                </button>
+          <div className="mb-5">
+            {/* Existing entries for this calc family */}
+            {myEntries.length > 0 && (
+              <div className="space-y-2 mb-3">
+                {myEntries.map(entry => {
+                  const entryCalc = entry.calculator_id === calc.id
+                    ? calc
+                    : variants.find(v => v.id === entry.calculator_id);
+                  return (
+                    <div key={entry.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-sm border ${
+                      entry.status === 'owned'
+                        ? 'bg-amber-400/10 text-amber-400 border-amber-400/20'
+                        : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                    }`}>
+                      <span>{entry.status === 'owned' ? '🧮' : '⭐'}</span>
+                      <span className="flex-1">
+                        {entry.status === 'owned' ? 'In collection' : 'On wishlist'}
+                        {entryCalc?.variant_label && (
+                          <span className="text-xs ml-1.5 opacity-60">· {entryCalc.variant_label}</span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => removeEntry(entry.id)}
+                        disabled={removingEntryId === entry.id}
+                        className="text-zinc-600 hover:text-red-400 transition-colors px-1 leading-none"
+                        title="Remove">
+                        {removingEntryId === entry.id ? '…' : '✕'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Add buttons */}
+            <div className="flex gap-2">
+              <button onClick={() => openCollectionModal('owned')} disabled={adding}
+                className="px-4 py-2.5 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
+                {myEntries.some(e => e.status === 'owned')
+                  ? (variants.length > 0 ? '+ Add variant' : '+ Add another')
+                  : 'I own this'}
+              </button>
+              {!myEntries.some(e => e.status === 'wanted') && (
                 <button onClick={() => openCollectionModal('wanted')} disabled={adding}
                   className="px-4 py-2.5 bg-zinc-800 text-zinc-100 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors disabled:opacity-50 border border-zinc-700">
                   I want this
                 </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Stats grid */}
@@ -412,9 +430,13 @@ export default function CalculatorPage() {
         <CollectionModal
           calcId={calc.id}
           calcName={`${calc.make} ${calc.model}`}
+          variants={variants}
           status={pendingStatus}
           onClose={() => setShowCollectionModal(false)}
-          onSuccess={(entry) => { setExistingEntry(entry); setShowCollectionModal(false); }}
+          onSuccess={(entry) => {
+            setMyEntries(prev => [...prev.filter(e => e.id !== entry.id), entry]);
+            setShowCollectionModal(false);
+          }}
         />
       )}
 
@@ -1045,16 +1067,19 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
 function CollectionModal({
   calcId,
   calcName,
+  variants,
   status,
   onClose,
   onSuccess,
 }: {
   calcId: string;
   calcName: string;
+  variants: Calculator[];
   status: 'owned' | 'wanted';
   onClose: () => void;
   onSuccess: (entry: CollectionEntry) => void;
 }) {
+  const [selectedCalcId, setSelectedCalcId] = useState(calcId);
   const [condition, setCondition] = useState('');
   const [notes, setNotes] = useState('');
   const [acquiredFrom, setAcquiredFrom] = useState('');
@@ -1062,12 +1087,17 @@ function CollectionModal({
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const selectedVariant = variants.find(v => v.id === selectedCalcId);
+  const displayName = selectedVariant?.variant_label
+    ? `${calcName} · ${selectedVariant.variant_label}`
+    : calcName;
+
   const handleAdd = async () => {
     setAdding(true);
     setError(null);
     try {
       const entry = await api.collection.add({
-        calculator_id: calcId,
+        calculator_id: selectedCalcId,
         status,
         condition: condition || null,
         notes: notes.trim() || null,
@@ -1094,13 +1124,45 @@ function CollectionModal({
             <h3 className="font-mono font-bold text-zinc-100">
               {isOwned ? '🧮 Add to collection' : '⭐ Add to wishlist'}
             </h3>
-            <p className="text-zinc-600 font-mono text-xs mt-0.5">{calcName}</p>
+            <p className="text-zinc-600 font-mono text-xs mt-0.5">{displayName}</p>
           </div>
           <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 transition-colors text-xl leading-none">✕</button>
         </div>
 
         {error && (
           <p className="text-red-400 font-mono text-xs mb-3 bg-red-900/20 border border-red-900/30 px-3 py-2 rounded-lg">{error}</p>
+        )}
+
+        {/* Variant selector */}
+        {variants.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-2">
+              Which version?
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setSelectedCalcId(calcId)}
+                className={`px-3 py-1.5 rounded-lg font-mono text-xs border transition-colors ${
+                  selectedCalcId === calcId
+                    ? 'bg-zinc-700 text-zinc-100 border-zinc-500'
+                    : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+                }`}>
+                Base model
+              </button>
+              {variants.map(v => (
+                <button
+                  key={v.id}
+                  onClick={() => setSelectedCalcId(v.id)}
+                  className={`px-3 py-1.5 rounded-lg font-mono text-xs border transition-colors ${
+                    selectedCalcId === v.id
+                      ? 'bg-zinc-700 text-zinc-100 border-zinc-500'
+                      : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+                  }`}>
+                  {v.variant_label ?? v.model}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Condition — only for owned */}

@@ -13,34 +13,40 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def send_notification(subject: str, html: str) -> None:
-    """Fire-and-forget email to the admin notification address."""
-    if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.NOTIFICATION_EMAIL:
-        logger.debug("Email not configured — skipping notification: %s", subject)
+async def _send_to(to_email: str, subject: str, html: str) -> None:
+    """Fire-and-forget email to an arbitrary address."""
+    if not settings.SMTP_HOST or not settings.SMTP_USER:
+        logger.debug("Email not configured — skipping: %s", subject)
         return
 
     def _send() -> None:
         msg = MIMEMultipart("alternative")
         msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
-        msg["To"] = settings.NOTIFICATION_EMAIL
+        msg["To"] = to_email
         msg["Subject"] = f"[CurioCalc] {subject}"
         msg.attach(MIMEText(html, "html"))
-
         try:
             with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as smtp:
                 smtp.ehlo()
                 smtp.starttls()
                 smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 smtp.send_message(msg)
-            logger.info("Email sent: %s", subject)
+            logger.info("Email sent to %s: %s", to_email, subject)
         except Exception as exc:
             logger.error("Email send failed: %s — %s", subject, exc)
 
-    # Run in thread so we don't block the event loop
     asyncio.create_task(asyncio.to_thread(_send))
 
 
-# ── Notification helpers ──────────────────────────────────────────────────────
+async def send_notification(subject: str, html: str) -> None:
+    """Fire-and-forget email to the admin notification address."""
+    if not settings.NOTIFICATION_EMAIL:
+        logger.debug("No NOTIFICATION_EMAIL configured — skipping: %s", subject)
+        return
+    await _send_to(settings.NOTIFICATION_EMAIL, subject, html)
+
+
+# ── Admin notifications ───────────────────────────────────────────────────────
 
 async def notify_new_user(username: str, email: str) -> None:
     await send_notification(
@@ -91,5 +97,43 @@ async def notify_calc_deleted(make: str, model: str, deleted_by: str) -> None:
         <ul>
           <li><strong>Deleted by:</strong> {deleted_by}</li>
         </ul>
+        """,
+    )
+
+
+# ── User-facing notifications ─────────────────────────────────────────────────
+
+async def send_follow_email(to_email: str, actor_username: str, actor_display_name: str | None) -> None:
+    name = actor_display_name or f"@{actor_username}"
+    await _send_to(
+        to_email,
+        f"{name} followed you on CurioCalc",
+        f"""
+        <p><strong>{name}</strong>
+        (<a href="https://curiocalc.org/u/{actor_username}">@{actor_username}</a>)
+        started following you on <strong>CurioCalc</strong>.</p>
+        <p><a href="https://curiocalc.org/u/{actor_username}">View their profile →</a></p>
+        """,
+    )
+
+
+async def send_comment_email(
+    to_email: str,
+    actor_username: str,
+    calc_make: str,
+    calc_model: str,
+    calc_id: str,
+    snippet: str,
+) -> None:
+    await _send_to(
+        to_email,
+        f"New comment on {calc_make} {calc_model}",
+        f"""
+        <p><a href="https://curiocalc.org/u/{actor_username}">@{actor_username}</a>
+        commented on <strong>{calc_make} {calc_model}</strong>:</p>
+        <blockquote style="border-left:3px solid #ccc;padding-left:12px;color:#555;margin:12px 0;">
+          {snippet}
+        </blockquote>
+        <p><a href="https://curiocalc.org/calculators/{calc_id}">View discussion →</a></p>
         """,
     )
