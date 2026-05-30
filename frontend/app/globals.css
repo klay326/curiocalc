@@ -31,37 +31,13 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   THEMES — override Tailwind v4 CSS custom properties per data-theme
+   THEMES
+   Design rule: zinc-700 through zinc-800 stay neutral dark (borders
+   and card surfaces don't get tinted — only backgrounds and text do).
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── 1. Crimson — pure black + pure bright red (default) ─────────── */
-:root, [data-theme="crimson"] {
-  color-scheme: dark;
-
-  /* Near-pure blacks — only the faintest red whisper */
-  --color-zinc-950: #020000;
-  --color-zinc-900: #080000;
-  --color-zinc-800: #110000;
-  --color-zinc-700: #1c0000;
-  --color-zinc-600: #2e0000;
-  --color-zinc-500: #4a0000;
-  --color-zinc-400: #700000;
-  --color-zinc-300: #a00000;
-  --color-zinc-200: #cc2020;
-  --color-zinc-100: #f0b0b0;
-
-  /* Pure vivid red accent */
-  --color-amber-400: #ff0000;
-  --color-amber-300: #ff4040;
-  --color-amber-900: #110000;
-
-  --color-pink-950: #080000;
-  --color-pink-900: #110000;
-  --color-pink-500: #ff0000;
-}
-
-/* ── 2. Obsidian — charcoal dark + electric amber gold ──────────── */
-[data-theme="obsidian"] {
+/* ── 1. Obsidian — neutral charcoal + amber gold (default) ────── */
+:root, [data-theme="obsidian"] {
   color-scheme: dark;
 
   --color-zinc-950: #0a0a0a;
@@ -79,88 +55,120 @@ body {
   --color-amber-300: #fbbf24;
   --color-amber-900: #1a1200;
 
-  --color-pink-950: #130e00;
-  --color-pink-900: #1f1600;
-  --color-pink-500: #f59e0b;
+  /* purple for secondary score bar (weirdness) */
+  --color-pink-950: #100c1a;
+  --color-pink-900: #1e1530;
+  --color-pink-500: #a855f7;
 }
 
-/* ── 3. Terminal — phosphor green on pure black ──────────────────── */
+/* ── 2. Crimson — neutral dark + vivid red ──────────────────────── */
+[data-theme="crimson"] {
+  color-scheme: dark;
+
+  /* Same neutral surface stack as obsidian */
+  --color-zinc-950: #0a0a0a;
+  --color-zinc-900: #141414;
+  --color-zinc-800: #1f1f1f;
+  --color-zinc-700: #2e2e2e;
+  --color-zinc-600: #484848;
+  --color-zinc-500: #666666;
+  --color-zinc-400: #8a8a8a;
+  --color-zinc-300: #aaaaaa;
+  --color-zinc-200: #d0d0d0;
+  --color-zinc-100: #f0f0f0;
+
+  --color-amber-400: #ef2222;
+  --color-amber-300: #ff5555;
+  --color-amber-900: #1a0000;
+
+  --color-pink-950: #100010;
+  --color-pink-900: #200020;
+  --color-pink-500: #d946ef;
+}
+
+/* ── 3. Terminal — phosphor green on near-black ─────────────────── */
 [data-theme="terminal"] {
   color-scheme: dark;
 
-  --color-zinc-950: #000400;
-  --color-zinc-900: #000d00;
-  --color-zinc-800: #001800;
-  --color-zinc-700: #002400;
-  --color-zinc-600: #003a00;
-  --color-zinc-500: #005800;
-  --color-zinc-400: #008000;
-  --color-zinc-300: #00b800;
-  --color-zinc-200: #00d800;
-  --color-zinc-100: #80f080;
+  /* Subtle green-black atmosphere in the deep layers */
+  --color-zinc-950: #010a01;
+  --color-zinc-900: #061006;
+  --color-zinc-800: #0e1a0e;
+  --color-zinc-700: #1c2a1c;
+  /* Mid-range stays close to neutral for readable borders / cards */
+  --color-zinc-600: #485a48;
+  --color-zinc-500: #647864;
+  --color-zinc-400: #8aaa8c;
+  --color-zinc-300: #aeceb0;
+  --color-zinc-200: #d0ecd2;
+  --color-zinc-100: #eefaee;
 
-  --color-amber-400: #39ff14;
-  --color-amber-300: #5fff3a;
-  --color-amber-900: #001800;
+  --color-amber-400: #22c55e;
+  --color-amber-300: #4ade80;
+  --color-amber-900: #011a06;
 
-  --color-pink-950: #000d00;
-  --color-pink-900: #001800;
-  --color-pink-500: #39ff14;
+  --color-pink-950: #021008;
+  --color-pink-900: #042010;
+  --color-pink-500: #4ade80;
 }
 
-/* ── 4. Ocean — deep navy + electric sky blue ───────────────────── */
+/* ── 4. Ocean — deep navy + sky blue ───────────────────────────── */
 [data-theme="ocean"] {
   color-scheme: dark;
 
+  /* Subtle navy in the deep layers */
   --color-zinc-950: #010810;
-  --color-zinc-900: #04101e;
-  --color-zinc-800: #081828;
-  --color-zinc-700: #0e2238;
-  --color-zinc-600: #163050;
-  --color-zinc-500: #1e4068;
-  --color-zinc-400: #3a6890;
-  --color-zinc-300: #5c90b8;
-  --color-zinc-200: #90bad8;
-  --color-zinc-100: #cce4f4;
+  --color-zinc-900: #05101e;
+  --color-zinc-800: #0c1828;
+  --color-zinc-700: #162438;
+  /* Mid-range close to neutral */
+  --color-zinc-600: #364860;
+  --color-zinc-500: #506880;
+  --color-zinc-400: #7898b4;
+  --color-zinc-300: #a0bcd4;
+  --color-zinc-200: #c8dcf0;
+  --color-zinc-100: #eaf4ff;
 
   --color-amber-400: #38bdf8;
   --color-amber-300: #7dd3fc;
-  --color-amber-900: #081828;
+  --color-amber-900: #001222;
 
-  --color-pink-950: #040e20;
-  --color-pink-900: #081828;
-  --color-pink-500: #38bdf8;
+  --color-pink-950: #000a20;
+  --color-pink-900: #001030;
+  --color-pink-500: #818cf8;
 }
 
-/* ── 5. Ember — dark warm + deep orange glow ────────────────────── */
+/* ── 5. Ember — warm dark + copper orange ───────────────────────── */
 [data-theme="ember"] {
   color-scheme: dark;
 
-  --color-zinc-950: #0c0500;
-  --color-zinc-900: #180c00;
-  --color-zinc-800: #271600;
-  --color-zinc-700: #382200;
-  --color-zinc-600: #563400;
-  --color-zinc-500: #744a00;
-  --color-zinc-400: #a06820;
-  --color-zinc-300: #c08840;
-  --color-zinc-200: #dcac70;
-  --color-zinc-100: #f4d8a8;
+  /* Subtle warm-brown in the deep layers */
+  --color-zinc-950: #0e0a06;
+  --color-zinc-900: #180e08;
+  --color-zinc-800: #241808;
+  --color-zinc-700: #342410;
+  /* Mid-range close to neutral */
+  --color-zinc-600: #544030;
+  --color-zinc-500: #766050;
+  --color-zinc-400: #a09070;
+  --color-zinc-300: #c4b090;
+  --color-zinc-200: #e0cfb0;
+  --color-zinc-100: #f8edd8;
 
   --color-amber-400: #f97316;
   --color-amber-300: #fb923c;
-  --color-amber-900: #271600;
+  --color-amber-900: #200a00;
 
-  --color-pink-950: #180800;
-  --color-pink-900: #271200;
-  --color-pink-500: #f97316;
+  --color-pink-950: #160600;
+  --color-pink-900: #240c00;
+  --color-pink-500: #fbbf24;
 }
 
-/* ── 6. Paper — clean warm light mode ───────────────────────────── */
+/* ── 6. Paper — warm ivory light mode ──────────────────────────── */
 [data-theme="paper"] {
   color-scheme: light;
 
-  --color-zinc-950: #fdf8f0;
+  --color-zinc-950: #fdf8f2;
   --color-zinc-900: #f5ede0;
   --color-zinc-800: #e8ddd0;
   --color-zinc-700: #d4c8b8;
@@ -169,13 +177,13 @@ body {
   --color-zinc-400: #504438;
   --color-zinc-300: #383028;
   --color-zinc-200: #201c18;
-  --color-zinc-100: #0e0c0a;
+  --color-zinc-100: #100c08;
 
-  --color-amber-400: #c2410c;
-  --color-amber-300: #9a3412;
-  --color-amber-900: #fde8d8;
+  --color-amber-400: #b45309;
+  --color-amber-300: #92400e;
+  --color-amber-900: #fde8d0;
 
-  --color-pink-950: #fdf2e8;
-  --color-pink-900: #fae0cc;
-  --color-pink-500: #c2410c;
+  --color-pink-950: #fdf0ea;
+  --color-pink-900: #f8ddd0;
+  --color-pink-500: #9333ea;
 }
