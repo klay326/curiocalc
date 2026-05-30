@@ -166,10 +166,10 @@ export function Nav() {
   const pickerRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close picker on outside click
+  // Close picker on outside click — use data attr so both desktop + mobile divs are covered
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setShowPicker(false);
+      if (!(e.target as Element).closest('[data-theme-picker]')) setShowPicker(false);
     };
     if (showPicker) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -294,7 +294,7 @@ export function Nav() {
             )}
 
             {/* Theme dot */}
-            <div className="relative" ref={pickerRef}>
+            <div className="relative" ref={pickerRef} data-theme-picker>
               <button
                 onClick={() => setShowPicker(v => !v)}
                 title="Change theme"
@@ -323,7 +323,7 @@ export function Nav() {
           <div className="flex md:hidden items-center gap-3">
             {user && <NotificationBell />}
             {/* Theme dot */}
-            <div className="relative" ref={pickerRef}>
+            <div className="relative" ref={pickerRef} data-theme-picker>
               <button
                 onClick={() => setShowPicker(v => !v)}
                 title="Change theme"
