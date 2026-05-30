@@ -476,6 +476,7 @@ export default function CalculatorPage() {
         <CollectionModal
           calcId={calc.id}
           calcName={`${calc.make} ${calc.model}`}
+          baseLabel={calc.variant_label ?? 'Base model'}
           variants={variants}
           status={pendingStatus}
           onClose={() => setShowCollectionModal(false)}
@@ -1323,6 +1324,7 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
 function CollectionModal({
   calcId,
   calcName,
+  baseLabel,
   variants,
   status,
   onClose,
@@ -1330,6 +1332,7 @@ function CollectionModal({
 }: {
   calcId: string;
   calcName: string;
+  baseLabel: string;
   variants: Calculator[];
   status: 'owned' | 'wanted';
   onClose: () => void;
@@ -1403,7 +1406,7 @@ function CollectionModal({
                     ? 'bg-zinc-700 text-zinc-100 border-zinc-500'
                     : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
                 }`}>
-                Base model
+                {baseLabel}
               </button>
               {variants.map(v => (
                 <button
