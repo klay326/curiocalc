@@ -28,6 +28,8 @@ export default function HomePage() {
   const [featured, setFeatured]       = useState<Calculator | null>(null);
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [recentlyViewed, setRecentlyViewed] = useState<Calculator[]>([]);
+  const [suggestions, setSuggestions] = useState<Calculator[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const [query, setQuery]             = useState('');
   const [inputVal, setInputVal]       = useState('');
@@ -120,6 +122,15 @@ export default function HomePage() {
     return () => clearTimeout(t);
   }, [inputVal]);
 
+  // Autocomplete suggestions (only shown before committing the full search)
+  useEffect(() => {
+    if (inputVal.length < 2) { setSuggestions([]); return; }
+    const t = setTimeout(() => {
+      api.calculators.list({ q: inputVal, limit: 6 }).then(setSuggestions).catch(() => {});
+    }, 150);
+    return () => clearTimeout(t);
+  }, [inputVal]);
+
   // Infinite scroll — fire load(false) when sentinel enters viewport
   useEffect(() => {
     const el = sentinelRef.current;
@@ -158,14 +169,36 @@ export default function HomePage() {
             type="text"
             placeholder="Search make, model, display type, tags… (press / to focus)"
             value={inputVal}
-            onChange={e => setInputVal(e.target.value)}
+            onChange={e => { setInputVal(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             className="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-10 pr-4 py-3.5 text-zinc-100 placeholder-zinc-500 font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/20 transition-colors"
           />
           {inputVal && (
-            <button onClick={() => setInputVal('')}
+            <button onClick={() => { setInputVal(''); setSuggestions([]); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300 transition-colors text-lg leading-none">
               ✕
             </button>
+          )}
+          {/* Autocomplete dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute z-30 top-full mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden">
+              {suggestions.map(s => (
+                <Link key={s.id} href={`/calculators/${s.id}`}
+                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800 transition-colors group">
+                  <div className="w-8 h-8 flex-shrink-0 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                    {s.images[0]
+                      ? <img src={s.images[0]} alt="" className="w-full h-full object-contain" />
+                      : <span className="text-base opacity-30">🧮</span>}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-mono text-zinc-500">{s.make}</p>
+                    <p className="text-sm font-mono font-bold text-zinc-200 group-hover:text-amber-400 transition-colors truncate">{s.model}</p>
+                  </div>
+                  {s.year_introduced && <span className="ml-auto text-[10px] font-mono text-zinc-600 flex-shrink-0">{s.year_introduced}</span>}
+                </Link>
+              ))}
+            </div>
           )}
         </div>
         <select

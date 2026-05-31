@@ -327,6 +327,7 @@ export const api = {
     random: () => request<Calculator>('/api/v1/calculators/random'),
     daily: () => request<Calculator>('/api/v1/calculators/daily'),
     alsoOwned: (id: string) => request<Calculator[]>(`/api/v1/calculators/${id}/also-owned`),
+    fetchWiki: (id: string) => request<{ description: string | null; title: string | null }>(`/api/v1/calculators/${id}/wiki-description`),
     brands: () => request<BrandSummary[]>('/api/v1/calculators/brands'),
     needsWork: (limit = 24) => request<Calculator[]>(`/api/v1/calculators/needs-work?limit=${limit}`),
     ownersAlsoOwn: (id: string) => request<Calculator[]>(`/api/v1/calculators/${id}/owners-also-own`),

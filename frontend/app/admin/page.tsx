@@ -246,13 +246,20 @@ function StatsTab() {
 }
 
 /* ────────────────────────────────── Calculators tab ── */
+type CompletenessFilter = 'all' | 'no_image' | 'no_desc' | 'unverified' | 'incomplete';
+
 function CalcsTab() {
   const [calcs, setCalcs] = useState<Calculator[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [completeness, setCompleteness] = useState<CompletenessFilter>('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkType, setBulkType] = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Calculator> & { tags_str?: string }>({});
   const [saving, setSaving] = useState(false);
+  const [wikiLoading, setWikiLoading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState('');
 
@@ -264,9 +271,52 @@ function CalcsTab() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const filtered = calcs.filter(c =>
-    !query || `${c.make} ${c.model}`.toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = calcs.filter(c => {
+    if (query && !`${c.make} ${c.model}`.toLowerCase().includes(query.toLowerCase())) return false;
+    if (completeness === 'no_image')   return c.images.length === 0;
+    if (completeness === 'no_desc')    return !c.description;
+    if (completeness === 'unverified') return !c.is_verified;
+    if (completeness === 'incomplete') return c.images.length === 0 || !c.description;
+    return true;
+  });
+
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
+  const selectAll = () => setSelected(new Set(filtered.map(c => c.id)));
+  const clearSelected = () => setSelected(new Set());
+
+  const bulkVerify = async () => {
+    setBulkLoading(true);
+    await Promise.all([...selected].map(id => api.calculators.update(id, { is_verified: true } as Partial<Calculator>)));
+    await fetchAll(); clearSelected(); setBulkLoading(false);
+  };
+  const bulkSetType = async () => {
+    if (!bulkType) return;
+    setBulkLoading(true);
+    await Promise.all([...selected].map(id => api.calculators.update(id, { calc_type: bulkType } as Partial<Calculator>)));
+    await fetchAll(); clearSelected(); setBulkLoading(false);
+  };
+  const bulkDelete = async () => {
+    if (!confirm(`Delete ${selected.size} calculators? This cannot be undone.`)) return;
+    setBulkLoading(true);
+    await Promise.all([...selected].map(id => api.calculators.delete(id)));
+    await fetchAll(); clearSelected(); setBulkLoading(false);
+  };
+
+  const fetchWiki = async () => {
+    if (!editing) return;
+    setWikiLoading(true);
+    try {
+      const result = await api.calculators.fetchWiki(editing);
+      if (result.description) {
+        setEditForm(prev => ({ ...prev, description: result.description! }));
+      } else {
+        alert('No Wikipedia article found for this calculator.');
+      }
+    } catch { alert('Wikipedia fetch failed.'); }
+    finally { setWikiLoading(false); }
+  };
 
   const startEdit = (calc: Calculator) => {
     setEditing(calc.id);
@@ -316,10 +366,62 @@ function CalcsTab() {
       {error && (
         <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-3 text-red-400 text-xs font-mono mb-4">{error}</div>
       )}
-      <div className="flex items-center gap-3 mb-4">
-        <input type="text" placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)}
-          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400" />
-        <span className="text-xs text-zinc-600 font-mono">{filtered.length} / {calcs.length}</span>
+      <div className="space-y-3 mb-4">
+        <div className="flex items-center gap-3">
+          <input type="text" placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)}
+            className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400" />
+          <span className="text-xs text-zinc-600 font-mono">{filtered.length} / {calcs.length}</span>
+        </div>
+        {/* Completeness filters */}
+        <div className="flex gap-1.5 flex-wrap">
+          {([
+            ['all',        'All'],
+            ['no_image',   '📷 Missing image'],
+            ['no_desc',    '📝 Missing description'],
+            ['unverified', '⚠ Unverified'],
+            ['incomplete', '🔴 Incomplete'],
+          ] as [CompletenessFilter, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setCompleteness(key)}
+              className={`text-[11px] font-mono px-2.5 py-1 rounded-full border transition-colors ${
+                completeness === key
+                  ? 'bg-amber-400/10 border-amber-400/40 text-amber-400'
+                  : 'border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {/* Bulk actions bar */}
+        {selected.size > 0 && (
+          <div className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 flex-wrap">
+            <span className="text-xs font-mono text-zinc-400">{selected.size} selected</span>
+            <button onClick={bulkVerify} disabled={bulkLoading}
+              className="text-xs font-mono px-2.5 py-1 rounded bg-amber-400/20 text-amber-400 hover:bg-amber-400/30 transition-colors disabled:opacity-50">
+              ✓ Verify all
+            </button>
+            <div className="flex items-center gap-1">
+              <select value={bulkType} onChange={e => setBulkType(e.target.value)}
+                className="text-xs font-mono bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-300">
+                <option value="">Set type…</option>
+                {CALC_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <button onClick={bulkSetType} disabled={!bulkType || bulkLoading}
+                className="text-xs font-mono px-2 py-1 rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 transition-colors disabled:opacity-40">
+                Apply
+              </button>
+            </div>
+            <button onClick={bulkDelete} disabled={bulkLoading}
+              className="text-xs font-mono px-2.5 py-1 rounded bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors disabled:opacity-50">
+              🗑 Delete
+            </button>
+            <button onClick={clearSelected} className="text-xs font-mono text-zinc-600 hover:text-zinc-300 ml-auto">✕</button>
+          </div>
+        )}
+        {filtered.length > 0 && selected.size === 0 && (
+          <button onClick={selectAll} className="text-[11px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors">
+            Select all {filtered.length}
+          </button>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -360,7 +462,13 @@ function CalcsTab() {
                     className="input" />
                 </div>
                 <div>
-                  <label className="label">Description</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="label mb-0">Description</label>
+                    <button type="button" onClick={fetchWiki} disabled={wikiLoading}
+                      className="text-[10px] font-mono text-zinc-500 hover:text-amber-400 border border-zinc-700 hover:border-amber-500/50 px-2 py-0.5 rounded transition-colors disabled:opacity-50">
+                      {wikiLoading ? '…' : '🌐 Fetch from Wikipedia'}
+                    </button>
+                  </div>
                   <textarea value={editForm.description ?? ''} onChange={setField('description')} rows={3} className="input resize-none" />
                 </div>
                 <div>
@@ -379,18 +487,26 @@ function CalcsTab() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4 px-4 py-3">
+              <div className="flex items-center gap-3 px-4 py-3">
+                {/* Checkbox */}
+                <input type="checkbox" checked={selected.has(calc.id)} onChange={() => toggleSelect(calc.id)}
+                  className="accent-amber-400 flex-shrink-0" />
                 {calc.images[0] ? (
                   <img src={calc.images[0]} alt="" className="w-12 h-9 object-contain rounded flex-shrink-0 bg-zinc-800" />
                 ) : (
                   <div className="w-12 h-9 bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center text-xl">🧮</div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold font-mono text-sm text-zinc-100">{calc.make} {calc.model}</span>
                     {calc.year_introduced && <span className="text-[10px] text-zinc-600 font-mono">{calc.year_introduced}</span>}
                     <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">{calc.calc_type}</span>
-                    {calc.is_verified && <span className="text-[10px] text-amber-400 font-mono">✓</span>}
+                    {calc.is_verified && <span className="text-[10px] text-amber-400 font-mono">✓ verified</span>}
+                    {/* Completeness dots */}
+                    <span title={calc.images.length > 0 ? 'Has image' : 'No image'}
+                      className={`text-[9px] ${calc.images.length > 0 ? 'text-green-500' : 'text-red-500'}`}>●</span>
+                    <span title={calc.description ? 'Has description' : 'No description'}
+                      className={`text-[9px] ${calc.description ? 'text-green-500' : 'text-red-500'}`}>●</span>
                   </div>
                   {calc.description && (
                     <p className="text-[11px] text-zinc-600 font-mono truncate mt-0.5">{calc.description.slice(0, 100)}</p>

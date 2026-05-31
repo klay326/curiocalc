@@ -51,6 +51,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <link rel="alternate" type="application/rss+xml" title="CurioCalc — New Calculators"
+          href="https://api.curiocalc.org/api/v1/calculators/rss" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100 min-h-screen`}>
         <ThemeProvider>

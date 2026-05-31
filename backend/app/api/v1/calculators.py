@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, distinct, text
 import uuid
+import httpx
 
 from app.api.deps import get_db, get_current_user, get_current_superuser, get_current_staff
 from app.models.user import User
@@ -356,6 +358,94 @@ async def get_variants(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
         )
         for v in variants
     ]
+
+
+@router.get("/rss")
+async def rss_feed(db: AsyncSession = Depends(get_db)):
+    """RSS feed of the 50 most recently added base calculators."""
+    result = await db.execute(
+        select(Calculator)
+        .where(Calculator.parent_id.is_(None))
+        .order_by(Calculator.created_at.desc())
+        .limit(50)
+    )
+    calcs = result.scalars().all()
+
+    def esc(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    items = []
+    for c in calcs:
+        img_tag = f'<img src="{c.images[0]}" style="max-width:400px;"/>' if c.images else ""
+        desc = esc(c.description or "")
+        pub = c.created_at.strftime("%a, %d %b %Y %H:%M:%S +0000")
+        items.append(
+            f"  <item>\n"
+            f"    <title>{esc(c.make)} {esc(c.model)}</title>\n"
+            f"    <link>https://curiocalc.org/calculators/{c.id}</link>\n"
+            f"    <description><![CDATA[{img_tag}<p>{desc}</p>]]></description>\n"
+            f"    <pubDate>{pub}</pubDate>\n"
+            f"    <guid isPermaLink=\"true\">https://curiocalc.org/calculators/{c.id}</guid>\n"
+            f"  </item>"
+        )
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
+        '  <channel>\n'
+        '    <title>CurioCalc — New Calculators</title>\n'
+        '    <link>https://curiocalc.org</link>\n'
+        '    <atom:link href="https://api.curiocalc.org/api/v1/calculators/rss"'
+        ' rel="self" type="application/rss+xml"/>\n'
+        '    <description>Latest calculators added to the CurioCalc database</description>\n'
+        '    <language>en-us</language>\n'
+        '    <ttl>60</ttl>\n'
+        + "\n".join(items) + "\n"
+        '  </channel>\n'
+        '</rss>'
+    )
+    return Response(content=xml, media_type="application/rss+xml; charset=utf-8")
+
+
+@router.get("/{calc_id}/wiki-description")
+async def fetch_wiki_description(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_staff),
+):
+    """Fetch a description for this calculator from Wikipedia (staff only)."""
+    calc_r = await db.execute(select(Calculator).where(Calculator.id == calc_id))
+    calc = calc_r.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculator not found")
+
+    query = f"{calc.make} {calc.model}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "titles": query,
+                    "prop": "extracts",
+                    "exintro": "true",
+                    "explaintext": "true",
+                    "format": "json",
+                    "redirects": "true",
+                },
+            )
+            data = r.json()
+        pages = data.get("query", {}).get("pages", {})
+        for pid, page in pages.items():
+            if pid != "-1":
+                extract = (page.get("extract") or "").strip()
+                if extract:
+                    # Trim to intro paragraph only
+                    extract = extract.split("\n\n")[0].strip()[:800]
+                    return {"description": extract, "title": page.get("title")}
+    except Exception:
+        pass
+    return {"description": None, "title": None}
 
 
 @router.get("/{calc_id}/also-owned", response_model=list[CalculatorPublic])

@@ -32,6 +32,7 @@ export default function CalculatorPage() {
   const [pendingStatus, setPendingStatus] = useState<'owned' | 'wanted'>('owned');
   const [showAddVariant, setShowAddVariant] = useState(false);
   const [alsoOwned, setAlsoOwned] = useState<Calculator[]>([]);
+  const [showEmbed, setShowEmbed] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -348,6 +349,28 @@ export default function CalculatorPage() {
                 </a>
               ) : null
             )}
+            {/* Embed */}
+            <div className="relative">
+              <button
+                onClick={() => setShowEmbed(v => !v)}
+                className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-colors">
+                {'<>'} Embed
+              </button>
+              {showEmbed && (
+                <div className="absolute left-0 top-full mt-1 z-20 bg-zinc-900 border border-zinc-700 rounded-xl p-3 shadow-2xl w-80">
+                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Embed this calculator</p>
+                  <textarea
+                    readOnly
+                    value={`<iframe src="https://curiocalc.org/calculators/${calc.id}" width="360" height="500" style="border:none;border-radius:12px;" loading="lazy"></iframe>`}
+                    rows={3}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-zinc-400 font-mono text-[10px] resize-none focus:outline-none"
+                    onClick={e => (e.target as HTMLTextAreaElement).select()}
+                  />
+                  <p className="text-[10px] font-mono text-zinc-600 mt-1">Click to select, then copy</p>
+                </div>
+              )}
+            </div>
+
             {user?.is_superuser ? (
               <>
                 <button
