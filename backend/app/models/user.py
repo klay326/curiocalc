@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, DateTime, Boolean, Text, func
+from sqlalchemy.types import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -21,6 +22,7 @@ class User(Base):
     website: Mapped[str | None] = mapped_column(String(500))
 
     theme: Mapped[str] = mapped_column(String(20), default='obsidian')
+    collection_photos: Mapped[list] = mapped_column(JSON, default=list, server_default='[]')
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)

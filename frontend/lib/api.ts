@@ -43,6 +43,7 @@ export type AuthUser = {
   is_curator: boolean;
   api_key: string | null;
   theme: string;
+  collection_photos: string[];
 };
 
 export type AdminUser = {
@@ -391,6 +392,23 @@ export const api = {
     },
     generateApiKey: () =>
       request<AuthUser>('/api/v1/users/me/api-key', { method: 'POST' }),
+    uploadShelfPhoto: async (file: File): Promise<AuthUser> => {
+      const token = getToken();
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API_URL}/api/v1/users/me/collection-photos`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Upload failed');
+      }
+      return res.json();
+    },
+    removeShelfPhoto: (index: number) =>
+      request<AuthUser>(`/api/v1/users/me/collection-photos/${index}`, { method: 'DELETE' }),
   },
 
   stats: {

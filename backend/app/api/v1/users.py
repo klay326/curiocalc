@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.collection import CollectionEntry
 from app.models.follow import Follow
 from app.schemas.user import UserPublic, UserUpdate, UserMe, UserProfile
+from app.services.storage import upload_image
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -25,6 +26,40 @@ async def update_me(
 ):
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(current_user, field, value)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
+@router.post("/me/collection-photos", response_model=UserMe)
+async def upload_collection_photo(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload a shelf/collection photo for the current user."""
+    photos = list(current_user.collection_photos or [])
+    if len(photos) >= 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 shelf photos allowed")
+    url = await upload_image(file, folder=f"shelf/{current_user.id}")
+    current_user.collection_photos = [*photos, url]
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
+@router.delete("/me/collection-photos/{index}", response_model=UserMe)
+async def remove_collection_photo(
+    index: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove a shelf photo by index."""
+    photos = list(current_user.collection_photos or [])
+    if index < 0 or index >= len(photos):
+        raise HTTPException(status_code=404, detail="Photo not found")
+    photos.pop(index)
+    current_user.collection_photos = photos
     await db.commit()
     await db.refresh(current_user)
     return current_user

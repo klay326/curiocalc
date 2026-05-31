@@ -45,6 +45,7 @@ class UserMe(UserPublic):
     is_superuser: bool
     is_curator: bool = False
     theme: str = 'obsidian'
+    collection_photos: list[str] = []
 
 
 class UserAdminUpdate(BaseModel):

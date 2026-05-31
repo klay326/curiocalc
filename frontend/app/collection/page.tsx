@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type CollectionEntry, type Calculator } from '@/lib/api';
+import { api, type CollectionEntry, type Calculator, type AuthUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 type EntryWithCalc = CollectionEntry & { calculator?: Calculator };
@@ -163,6 +163,134 @@ function PhotoPanel({ entry, onUpdate }: { entry: EntryWithCalc; onUpdate: (upda
   );
 }
 
+// ── Shelf / collection photo gallery ─────────────────────────────────────
+
+function ShelfPhotos({ user, onUpdate }: { user: AuthUser; onUpdate: (u: AuthUser) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [removing, setRemoving] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const photos = user.collection_photos ?? [];
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const updated = await api.users.uploadShelfPhoto(file);
+      onUpdate(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const handleRemove = async (i: number) => {
+    setRemoving(i);
+    setLightbox(null);
+    try {
+      const updated = await api.users.removeShelfPhoto(i);
+      onUpdate(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Remove failed');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">My Shelf</p>
+        {photos.length < 20 && (
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-dashed border-zinc-700 hover:border-zinc-500 px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {uploading ? <><span className="animate-spin inline-block text-sm">⟳</span> Uploading…</> : <>📷 Add photo</>}
+          </button>
+        )}
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+      </div>
+
+      {error && <p className="text-red-400 font-mono text-xs mb-2">{error}</p>}
+
+      {photos.length === 0 ? (
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="w-full flex flex-col items-center justify-center gap-2 py-8 border border-dashed border-zinc-800 hover:border-zinc-600 rounded-xl text-zinc-600 hover:text-zinc-400 transition-colors disabled:opacity-50"
+        >
+          <span className="text-3xl">📸</span>
+          <span className="text-xs font-mono">Upload a photo of your collection shelf</span>
+        </button>
+      ) : (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {photos.map((url, i) => (
+            <button
+              key={i}
+              onClick={() => setLightbox(i)}
+              className="relative flex-shrink-0 w-32 h-32 sm:w-40 sm:h-40 rounded-xl overflow-hidden border border-zinc-800 hover:border-zinc-600 transition-colors group/shelf"
+            >
+              <img src={url} alt={`shelf photo ${i + 1}`} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/0 group-hover/shelf:bg-black/30 transition-colors rounded-xl" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightbox !== null && photos[lightbox] && (
+        <div
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+            <img
+              src={photos[lightbox]}
+              alt="shelf photo"
+              className="w-full max-h-[80vh] object-contain rounded-xl"
+            />
+            <div className="absolute top-3 right-3 flex gap-2">
+              <button
+                onClick={() => handleRemove(lightbox)}
+                disabled={removing === lightbox}
+                className="bg-red-600/90 hover:bg-red-500 text-white font-mono text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {removing === lightbox ? '…' : '🗑 Remove'}
+              </button>
+              <button
+                onClick={() => setLightbox(null)}
+                className="bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 font-mono text-xs px-3 py-1.5 rounded-lg transition-colors"
+              >
+                ✕ Close
+              </button>
+            </div>
+            {/* Prev/next navigation */}
+            {photos.length > 1 && (
+              <>
+                <button
+                  onClick={() => setLightbox((lightbox - 1 + photos.length) % photos.length)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white font-mono text-sm w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                >‹</button>
+                <button
+                  onClick={() => setLightbox((lightbox + 1) % photos.length)}
+                  className="absolute right-12 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white font-mono text-sm w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                >›</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Mini bar chart ───────────────────────────────────────────────────────────
 
 function BarChart({ rows, color = 'bg-amber-400' }: { rows: [string, number][]; color?: string }) {
@@ -297,6 +425,9 @@ export default function CollectionPage() {
   const [activeTab, setActiveTab] = useState<'owned' | 'wanted' | 'for_sale' | 'stats'>('owned');
   const [expandedPhotos, setExpandedPhotos] = useState<Set<string>>(new Set());
   const [expandedForSale, setExpandedForSale] = useState<Set<string>>(new Set());
+  // Local copy of user to reflect shelf photo changes without a full auth refresh
+  const [localUser, setLocalUser] = useState<AuthUser | null>(null);
+  useEffect(() => { if (user) setLocalUser(user); }, [user]);
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
@@ -380,6 +511,9 @@ export default function CollectionPage() {
           </div>
         ))}
       </div>
+
+      {/* Shelf photos */}
+      {localUser && <ShelfPhotos user={localUser} onUpdate={setLocalUser} />}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
