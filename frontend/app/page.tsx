@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { api, type Calculator, type SiteStats } from '@/lib/api';
+import { api, type Calculator, type SiteStats, getRecentlyViewedIds } from '@/lib/api';
 import { CalculatorCard } from '@/components/calculator-card';
 import { useAuth } from '@/lib/auth';
 
@@ -27,6 +27,7 @@ export default function HomePage() {
   const [stats, setStats]             = useState<SiteStats | null>(null);
   const [featured, setFeatured]       = useState<Calculator | null>(null);
   const [featuredLoading, setFeaturedLoading] = useState(true);
+  const [recentlyViewed, setRecentlyViewed] = useState<Calculator[]>([]);
 
   const [query, setQuery]             = useState('');
   const [inputVal, setInputVal]       = useState('');
@@ -51,6 +52,15 @@ export default function HomePage() {
       .then(setFeatured)
       .catch(() => {})
       .finally(() => setFeaturedLoading(false));
+    // Load recently viewed from localStorage
+    const ids = getRecentlyViewedIds();
+    if (ids.length > 0) {
+      api.calculators.batch(ids).then(calcs => {
+        // Preserve localStorage order
+        const map = Object.fromEntries(calcs.map(c => [c.id, c]));
+        setRecentlyViewed(ids.map(id => map[id]).filter(Boolean));
+      }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -215,6 +225,30 @@ export default function HomePage() {
                 <div className="h-2 bg-zinc-800 rounded w-1/4" />
                 <div className="h-4 bg-zinc-800 rounded w-1/2" />
                 <div className="h-2 bg-zinc-800 rounded w-1/5" />
+              </div>
+            </div>
+          )}
+
+          {/* Recently viewed */}
+          {recentlyViewed.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Recently viewed</h2>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {recentlyViewed.map(c => (
+                  <Link key={c.id} href={`/calculators/${c.id}`}
+                    className="group flex-shrink-0 w-20 bg-zinc-900 border border-zinc-800 hover:border-amber-400/30 rounded-lg overflow-hidden transition-colors">
+                    <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
+                      {c.images[0]
+                        ? <img src={c.images[0]} alt={c.model} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                        : <span className="text-xl opacity-20">🧮</span>
+                      }
+                    </div>
+                    <div className="p-1.5">
+                      <p className="text-[9px] text-zinc-600 font-mono truncate">{c.make}</p>
+                      <p className="text-[10px] font-bold text-zinc-300 group-hover:text-amber-400 transition-colors truncate">{c.model}</p>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
           )}

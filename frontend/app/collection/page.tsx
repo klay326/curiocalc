@@ -163,6 +163,157 @@ function PhotoPanel({ entry, onUpdate }: { entry: EntryWithCalc; onUpdate: (upda
   );
 }
 
+// ── CSV bulk import ───────────────────────────────────────────────────────
+
+function CsvImport({ onImported }: { onImported: (added: EntryWithCalc[]) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<string[][]>([]);
+  const [importing, setImporting] = useState(false);
+  const [results, setResults] = useState<{ label: string; ok: boolean }[]>([]);
+
+  const parseCSV = (text: string): string[][] => {
+    return text.trim().split('\n').map(line =>
+      line.split(',').map(cell => cell.replace(/^"|"$/g, '').trim())
+    );
+  };
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const parsed = parseCSV(text);
+      // Skip header row if first cell looks like a header
+      const data = parsed[0]?.[0]?.toLowerCase().includes('make') ? parsed.slice(1) : parsed;
+      setRows(data.filter(r => r.length >= 2 && r[0] && r[1]));
+      setResults([]);
+      setOpen(true);
+    };
+    reader.readAsText(file);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const runImport = async () => {
+    setImporting(true);
+    const added: EntryWithCalc[] = [];
+    const res: { label: string; ok: boolean }[] = [];
+
+    for (const row of rows) {
+      const [make, model, condition, notes, acquired_from, price] = row;
+      const label = `${make} ${model}`;
+      try {
+        // Search for the calculator
+        const results = await api.calculators.list({ q: `${make} ${model}`, limit: 5 });
+        const match = results.find(c =>
+          c.make.toLowerCase() === make.toLowerCase() &&
+          c.model.toLowerCase() === model.toLowerCase()
+        ) ?? results.find(c =>
+          c.make.toLowerCase().includes(make.toLowerCase()) &&
+          c.model.toLowerCase().includes(model.toLowerCase())
+        );
+
+        if (!match) { res.push({ label, ok: false }); continue; }
+
+        const entry = await api.collection.add({
+          calculator_id: match.id,
+          status: 'owned',
+          condition: condition || null,
+          notes: notes || null,
+          acquired_from: acquired_from || null,
+          acquired_price: price ? parseFloat(price) : null,
+        });
+        added.push({ ...entry, calculator: match });
+        res.push({ label, ok: true });
+      } catch {
+        res.push({ label, ok: false });
+      }
+    }
+
+    setResults(res);
+    setImporting(false);
+    if (added.length > 0) onImported(added);
+  };
+
+  const done = results.length > 0;
+  const okCount = results.filter(r => r.ok).length;
+
+  return (
+    <>
+      <button
+        onClick={() => fileRef.current?.click()}
+        className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+        title="Import from CSV"
+      >
+        ⬆ Import CSV
+      </button>
+      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+
+      {open && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-mono font-bold text-zinc-100">Import Collection</h3>
+              <button onClick={() => setOpen(false)} className="text-zinc-600 hover:text-zinc-300 text-xl leading-none">✕</button>
+            </div>
+
+            <p className="text-[11px] font-mono text-zinc-500 mb-4">
+              CSV format: <span className="text-zinc-400">Make, Model, Condition, Notes, Acquired From, Price</span>
+              <br/>Condition values: mint / excellent / good / fair / poor
+            </p>
+
+            {!done ? (
+              <>
+                <div className="bg-zinc-800 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto">
+                  {rows.length === 0 ? (
+                    <p className="text-zinc-600 font-mono text-xs italic">No rows found</p>
+                  ) : rows.map((r, i) => (
+                    <div key={i} className="text-[11px] font-mono text-zinc-400 py-0.5 border-b border-zinc-700/50 last:border-0">
+                      <span className="text-zinc-200">{r[0]}</span> {r[1]}
+                      {r[2] && <span className="text-zinc-600 ml-2">· {r[2]}</span>}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setOpen(false)}
+                    className="flex-1 px-4 py-2 bg-zinc-800 text-zinc-400 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors border border-zinc-700">
+                    Cancel
+                  </button>
+                  <button onClick={runImport} disabled={importing || rows.length === 0}
+                    className="flex-1 px-4 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
+                    {importing ? 'Importing…' : `Import ${rows.length} rows`}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-center mb-4">
+                  <p className="text-2xl font-bold font-mono text-amber-400">{okCount}/{results.length}</p>
+                  <p className="text-xs font-mono text-zinc-500">calculators imported</p>
+                </div>
+                <div className="bg-zinc-800 rounded-lg p-3 mb-4 max-h-48 overflow-y-auto space-y-1">
+                  {results.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px] font-mono">
+                      <span className={r.ok ? 'text-green-400' : 'text-red-400'}>{r.ok ? '✓' : '✗'}</span>
+                      <span className={r.ok ? 'text-zinc-300' : 'text-zinc-600'}>{r.label}</span>
+                      {!r.ok && <span className="text-zinc-700">not found</span>}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setOpen(false)}
+                  className="w-full px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors border border-zinc-700">
+                  Done
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Shelf / collection photo gallery ─────────────────────────────────────
 
 function ShelfPhotos({ user, onUpdate }: { user: AuthUser; onUpdate: (u: AuthUser) => void }) {
@@ -489,13 +640,16 @@ export default function CollectionPage() {
           <h1 className="text-2xl font-bold font-mono text-amber-400">My Collection</h1>
           <p className="text-zinc-600 text-xs font-mono mt-1">@{user.username}</p>
         </div>
-        <button
-          onClick={() => exportCSV(entries, user.username)}
-          disabled={entries.length === 0}
-          className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors disabled:opacity-30 flex items-center gap-1.5"
-        >
-          ⬇ Export CSV
-        </button>
+        <div className="flex gap-2">
+          <CsvImport onImported={(added) => setEntries(prev => [...prev, ...added])} />
+          <button
+            onClick={() => exportCSV(entries, user.username)}
+            disabled={entries.length === 0}
+            className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors disabled:opacity-30 flex items-center gap-1.5"
+          >
+            ⬇ Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

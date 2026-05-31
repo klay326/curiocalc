@@ -11,6 +11,12 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 export const metadata: Metadata = {
   title: 'CurioCalc — The Calculator Collection Community',
   description: 'Browse, catalog, and share your calculator collection. From everyday scientific models to the bizarre and obscure.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'CurioCalc',
+  },
   openGraph: {
     siteName: 'CurioCalc',
     type: 'website',
@@ -21,6 +27,10 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'CurioCalc — The Calculator Collection Community',
     description: 'Browse, catalog, and share your calculator collection. From everyday scientific models to the bizarre and obscure.',
+  },
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
   },
 };
 

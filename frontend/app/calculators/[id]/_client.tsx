@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type CollectionEntry, type EditSuggestion, type Comment, type AuthUser } from '@/lib/api';
+import { api, type Calculator, type CollectionEntry, type EditSuggestion, type Comment, type AuthUser, recordRecentlyViewed } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { CalculatorCard } from '@/components/calculator-card';
 
@@ -40,6 +40,7 @@ export default function CalculatorPage() {
     api.calculators.get(id)
       .then(async (c) => {
         setCalc(c);
+        recordRecentlyViewed(c.id);
         // Load related, variants, and parent in parallel
         const [r, v, p] = await Promise.all([
           api.calculators.related(id).catch(() => []),

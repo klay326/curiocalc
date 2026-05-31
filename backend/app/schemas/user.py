@@ -68,3 +68,4 @@ class UserProfile(UserPublic):
     follower_count: int = 0
     following_count: int = 0
     is_following: bool = False
+    collection_photos: list[str] = []

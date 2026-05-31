@@ -120,4 +120,5 @@ async def get_user(
         follower_count=follower_r.scalar() or 0,
         following_count=following_r.scalar() or 0,
         is_following=is_following,
+        collection_photos=user.collection_photos or [],
     )

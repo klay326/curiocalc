@@ -1,0 +1,19 @@
+{
+  "name": "CurioCalc",
+  "short_name": "CurioCalc",
+  "description": "The Calculator Collection Community — browse, catalog, and share your collection.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#fbbf24",
+  "orientation": "portrait-primary",
+  "categories": ["lifestyle", "social"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

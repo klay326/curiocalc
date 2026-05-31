@@ -71,7 +71,27 @@ export type UserProfile = {
   follower_count: number;
   following_count: number;
   is_following: boolean;
+  collection_photos: string[];
 };
+
+// ── Recently-viewed helpers (localStorage) ────────────────────────────────────
+const RV_KEY = 'cc-recently-viewed';
+const RV_MAX = 12;
+
+export function recordRecentlyViewed(id: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const prev: string[] = JSON.parse(localStorage.getItem(RV_KEY) || '[]');
+    const next = [id, ...prev.filter(x => x !== id)].slice(0, RV_MAX);
+    localStorage.setItem(RV_KEY, JSON.stringify(next));
+  } catch { /* ignore */ }
+}
+
+export function getRecentlyViewedIds(): string[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(RV_KEY) || '[]'); }
+  catch { return []; }
+}
 
 export type LeaderboardEntry = {
   rank: number;

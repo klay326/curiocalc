@@ -280,6 +280,21 @@ export default function UserProfilePage() {
         </div>
       )}
 
+      {/* Shelf photos */}
+      {profile.collection_photos?.length > 0 && (
+        <div className="mb-6">
+          <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Shelf</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {profile.collection_photos.map((url, i) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                className="flex-shrink-0 w-32 h-32 sm:w-40 sm:h-40 rounded-xl overflow-hidden border border-zinc-800 hover:border-zinc-600 transition-colors">
+                <img src={url} alt={`shelf photo ${i + 1}`} className="w-full h-full object-cover" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
