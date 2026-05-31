@@ -41,16 +41,29 @@ export default function HomePage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const makesRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const isFiltered = !!(query || selectedType || selectedDecade || selectedMake);
+
+  // Press "/" anywhere to focus the search box
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   // Load static data once
   useEffect(() => {
     api.calculators.makes().then(setMakes).catch(() => {});
     api.stats.get().then(setStats).catch(() => {});
-    api.calculators.random()
+    api.calculators.daily()
       .then(setFeatured)
-      .catch(() => {})
+      .catch(() => api.calculators.random().then(setFeatured).catch(() => {}))
       .finally(() => setFeaturedLoading(false));
     // Load recently viewed from localStorage
     const ids = getRecentlyViewedIds();
@@ -141,8 +154,9 @@ export default function HomePage() {
         <div className="flex-1 relative">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none select-none">🔍</span>
           <input
+            ref={searchRef}
             type="text"
-            placeholder="Search make, model, display type, tags…"
+            placeholder="Search make, model, display type, tags… (press / to focus)"
             value={inputVal}
             onChange={e => setInputVal(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-10 pr-4 py-3.5 text-zinc-100 placeholder-zinc-500 font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/20 transition-colors"
@@ -196,7 +210,7 @@ export default function HomePage() {
                 </div>
               </Link>
               <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-0.5">🎲 Random pick</p>
+                <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-0.5">🗓 Calculator of the day</p>
                 <Link href={`/calculators/${featured.id}`} className="group">
                   <p className="text-[10px] text-zinc-500 font-mono">{featured.make}</p>
                   <p className="font-bold font-mono text-zinc-100 group-hover:text-amber-400 transition-colors leading-tight">

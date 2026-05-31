@@ -171,6 +171,31 @@ async def get_random(db: AsyncSession = Depends(get_db)):
     return await _with_counts(db, calc)
 
 
+@router.get("/daily", response_model=CalculatorPublic)
+async def get_daily(db: AsyncSession = Depends(get_db)):
+    """Return the calculator of the day — stable within a UTC calendar day."""
+    from datetime import date as _date
+    day_num = (_date.today() - _date(2024, 1, 1)).days  # days since epoch
+
+    count_r = await db.execute(
+        select(func.count(Calculator.id)).where(Calculator.parent_id.is_(None))
+    )
+    total = count_r.scalar() or 1
+    offset = day_num % total
+
+    result = await db.execute(
+        select(Calculator)
+        .where(Calculator.parent_id.is_(None))
+        .order_by(Calculator.id)      # stable alphabetical-ish sort
+        .offset(offset)
+        .limit(1)
+    )
+    calc = result.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="No calculators found")
+    return await _with_counts(db, calc)
+
+
 @router.get("/brands", response_model=list[dict])
 async def list_brands(db: AsyncSession = Depends(get_db)):
     """Return all brands with calc counts and a sample image."""
@@ -330,6 +355,42 @@ async def get_variants(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
             | {"owner_count": 0, "want_count": 0, "variant_count": 0}
         )
         for v in variants
+    ]
+
+
+@router.get("/{calc_id}/also-owned", response_model=list[CalculatorPublic])
+async def get_also_owned(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Calculators most frequently co-owned by collectors who own this one."""
+    owners_sub = (
+        select(CollectionEntry.user_id)
+        .where(
+            CollectionEntry.calculator_id == calc_id,
+            CollectionEntry.status == "owned",
+        )
+        .scalar_subquery()
+    )
+    rows_r = await db.execute(
+        select(CollectionEntry.calculator_id, func.count().label("cnt"))
+        .where(
+            CollectionEntry.user_id.in_(owners_sub),
+            CollectionEntry.calculator_id != calc_id,
+            CollectionEntry.status == "owned",
+        )
+        .group_by(CollectionEntry.calculator_id)
+        .order_by(func.count().desc())
+        .limit(6)
+    )
+    ids = [row.calculator_id for row in rows_r]
+    if not ids:
+        return []
+    result = await db.execute(select(Calculator).where(Calculator.id.in_(ids)))
+    calcs = {c.id: c for c in result.scalars().all()}
+    return [
+        CalculatorPublic.model_validate(
+            {col.key: getattr(calcs[cid], col.key) for col in calcs[cid].__table__.columns}
+            | {"owner_count": 0, "want_count": 0, "variant_count": 0}
+        )
+        for cid in ids if cid in calcs
     ]
 
 

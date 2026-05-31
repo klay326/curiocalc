@@ -8,6 +8,7 @@ from app.api.deps import get_db, get_current_user
 from app.models.user import User
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
+from app.models.notification import Notification
 from app.schemas.collection import CollectionEntryCreate, CollectionEntryUpdate, CollectionEntryPublic
 from app.services.storage import upload_image
 
@@ -66,8 +67,38 @@ async def update_collection_entry(
     if not entry or entry.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Entry not found")
 
+    was_for_sale = entry.status == "for_sale"
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(entry, field, value)
+
+    # When a calc goes for sale, notify everyone who has it on their wishlist
+    now_for_sale = entry.status == "for_sale" and not was_for_sale
+    if now_for_sale:
+        calc_r = await db.execute(select(Calculator).where(Calculator.id == entry.calculator_id))
+        calc = calc_r.scalar_one_or_none()
+        if calc:
+            wishers_r = await db.execute(
+                select(CollectionEntry.user_id)
+                .where(
+                    CollectionEntry.calculator_id == entry.calculator_id,
+                    CollectionEntry.status == "wanted",
+                    CollectionEntry.user_id != current_user.id,
+                )
+                .limit(50)
+            )
+            for (wisher_id,) in wishers_r.all():
+                db.add(Notification(
+                    user_id=wisher_id,
+                    type="for_sale",
+                    actor_id=current_user.id,
+                    actor_username=current_user.username,
+                    actor_display_name=current_user.display_name,
+                    actor_avatar_url=current_user.avatar_url,
+                    calc_id=calc.id,
+                    calc_make=calc.make,
+                    calc_model=calc.model,
+                    body=f"@{current_user.username} listed it for sale",
+                ))
 
     await db.commit()
     await db.refresh(entry)

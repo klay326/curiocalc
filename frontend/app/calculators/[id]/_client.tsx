@@ -31,6 +31,7 @@ export default function CalculatorPage() {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<'owned' | 'wanted'>('owned');
   const [showAddVariant, setShowAddVariant] = useState(false);
+  const [alsoOwned, setAlsoOwned] = useState<Calculator[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -42,14 +43,16 @@ export default function CalculatorPage() {
         setCalc(c);
         recordRecentlyViewed(c.id);
         // Load related, variants, and parent in parallel
-        const [r, v, p] = await Promise.all([
+        const [r, v, p, ao] = await Promise.all([
           api.calculators.related(id).catch(() => []),
           api.calculators.variants(id).catch(() => []),
           c.parent_id ? api.calculators.get(c.parent_id).catch(() => null) : Promise.resolve(null),
+          api.calculators.alsoOwned(id).catch(() => []),
         ]);
         setRelated(r);
         setVariants(v);
         setParentCalc(p);
+        setAlsoOwned(ao);
       })
       .catch(() => router.push('/'))
       .finally(() => setLoading(false));
@@ -456,6 +459,16 @@ export default function CalculatorPage() {
           {variants.length === 0 && !showAddVariant && user?.is_superuser && (
             <p className="text-zinc-700 font-mono text-xs italic">No variants yet — click "+ Add variant" above to create one.</p>
           )}
+        </div>
+      )}
+
+      {/* Collectors also own */}
+      {alsoOwned.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-[10px] font-mono text-zinc-600 mb-4 uppercase tracking-widest">Collectors also own</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {alsoOwned.map(r => <CalculatorCard key={r.id} calc={r} compact />)}
+          </div>
         </div>
       )}
 
