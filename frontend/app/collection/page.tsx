@@ -499,6 +499,18 @@ function StatsTab({ entries }: { entries: EntryWithCalc[] }) {
   const uniqueTypes  = Object.keys(typeCounts).length;
   const avgSpend = spentCount > 0 ? totalSpent / spentCount : null;
 
+  // Monthly spend chart
+  const monthlySpend: Record<string, number> = {};
+  for (const e of owned) {
+    if (e.acquired_price != null) {
+      const d = new Date(e.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthlySpend[key] = (monthlySpend[key] ?? 0) + e.acquired_price;
+    }
+  }
+  const spendMonths = Object.entries(monthlySpend).sort((a, b) => a[0].localeCompare(b[0]));
+  const maxSpend = Math.max(...spendMonths.map(([, v]) => v), 1);
+
   if (owned.length === 0) {
     return (
       <div className="text-center py-20 text-zinc-600 font-mono">
@@ -562,6 +574,29 @@ function StatsTab({ entries }: { entries: EntryWithCalc[] }) {
           </div>
         )}
       </div>
+
+      {/* Monthly spend chart */}
+      {spendMonths.length > 1 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-4">
+            Spend over time · total ${totalSpent.toLocaleString()}
+          </p>
+          <div className="flex items-end gap-1.5 h-24">
+            {spendMonths.map(([month, amount]) => {
+              const pct = (amount / maxSpend) * 100;
+              const [yr, mo] = month.split('-');
+              const label = `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]} ${yr.slice(2)}`;
+              return (
+                <div key={month} className="flex-1 flex flex-col items-center gap-1 group min-w-0" title={`${label}: $${amount.toFixed(0)}`}>
+                  <span className="text-[8px] font-mono text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity">${amount.toFixed(0)}</span>
+                  <div className="w-full bg-amber-400/80 rounded-t transition-all" style={{ height: `${Math.max(pct, 4)}%` }} />
+                  <span className="text-[8px] font-mono text-zinc-600 truncate w-full text-center">{label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'users'>('stats');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'users' | 'merge'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
-        {(['stats', 'calcs', 'users', 'suggestions'] as const).map(t => (
+        {(['stats', 'calcs', 'users', 'suggestions', 'merge'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -45,9 +45,10 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 'stats' ? <StatsTab />
-       : tab === 'calcs' ? <CalcsTab />
-       : tab === 'users' ? <UsersTab />
+      {tab === 'stats'       ? <StatsTab />
+       : tab === 'calcs'     ? <CalcsTab />
+       : tab === 'users'     ? <UsersTab />
+       : tab === 'merge'     ? <MergeTab />
        : <SuggestionsTab />}
     </div>
   );
@@ -823,6 +824,134 @@ function AdminField({ label, value, onChange, type = 'text' }: {
     <div>
       <label className="label">{label}</label>
       <input type={type} value={value} onChange={onChange} className="input" />
+    </div>
+  );
+}
+
+/* ────────────────────────────────── Merge tab ── */
+function MergeTab() {
+  const [keepQuery, setKeepQuery]     = useState('');
+  const [removeQuery, setRemoveQuery] = useState('');
+  const [keepResults, setKeepResults]     = useState<Calculator[]>([]);
+  const [removeResults, setRemoveResults] = useState<Calculator[]>([]);
+  const [keepCalc, setKeepCalc]     = useState<Calculator | null>(null);
+  const [removeCalc, setRemoveCalc] = useState<Calculator | null>(null);
+  const [merging, setMerging] = useState(false);
+  const [result, setResult] = useState<Calculator | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const search = async (q: string, setter: (c: Calculator[]) => void) => {
+    if (!q.trim()) { setter([]); return; }
+    const data = await api.calculators.list({ q, limit: 6 }).catch(() => []);
+    setter(data);
+  };
+
+  const merge = async () => {
+    if (!keepCalc || !removeCalc) return;
+    if (!confirm(`Merge "${removeCalc.make} ${removeCalc.model}" into "${keepCalc.make} ${keepCalc.model}"?\n\nAll collection entries, comments and variants from the removed calculator will be transferred. This cannot be undone.`)) return;
+    setMerging(true);
+    setError(null);
+    try {
+      const merged = await api.admin.merge(keepCalc.id, removeCalc.id);
+      setResult(merged);
+      setKeepCalc(null); setRemoveCalc(null);
+      setKeepQuery(''); setRemoveQuery('');
+      setKeepResults([]); setRemoveResults([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Merge failed');
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4 text-xs font-mono text-amber-400">
+        ⚠ Merging transfers all collection entries, comments and variants from the removed calculator into the kept one, then permanently deletes the removed record. This cannot be undone.
+      </div>
+
+      {error && <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-3 text-red-400 text-xs font-mono">{error}</div>}
+      {result && (
+        <div className="bg-green-950/30 border border-green-900/40 rounded-xl p-4">
+          <p className="text-xs font-mono text-green-400 mb-1">✓ Merge complete</p>
+          <Link href={`/calculators/${result.id}`} className="text-sm font-mono font-bold text-zinc-100 hover:text-amber-400 transition-colors">
+            {result.make} {result.model} →
+          </Link>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        {/* Keep */}
+        <div>
+          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Keep (canonical)</p>
+          {keepCalc ? (
+            <div className="bg-zinc-900 border border-green-900/50 rounded-xl p-3 flex items-center gap-3">
+              {keepCalc.images[0] && <img src={keepCalc.images[0]} alt="" className="w-10 h-10 object-contain bg-zinc-800 rounded flex-shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-mono font-bold text-zinc-100 truncate">{keepCalc.make} {keepCalc.model}</p>
+                <p className="text-[10px] font-mono text-zinc-500">{keepCalc.year_introduced ?? '?'}</p>
+              </div>
+              <button onClick={() => setKeepCalc(null)} className="text-zinc-600 hover:text-zinc-300 text-sm">✕</button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input value={keepQuery} onChange={e => { setKeepQuery(e.target.value); search(e.target.value, setKeepResults); }}
+                placeholder="Search for canonical calc…"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors" />
+              {keepResults.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden shadow-xl">
+                  {keepResults.map(c => (
+                    <button key={c.id} type="button" onClick={() => { setKeepCalc(c); setKeepResults([]); setKeepQuery(''); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 transition-colors text-left">
+                      {c.images[0] && <img src={c.images[0]} alt="" className="w-8 h-8 rounded object-contain bg-zinc-900 flex-shrink-0" />}
+                      <div><p className="text-sm font-mono text-zinc-200">{c.make} {c.model}</p><p className="text-[10px] font-mono text-zinc-500">{c.year_introduced ?? '?'}</p></div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Remove */}
+        <div>
+          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Remove (duplicate)</p>
+          {removeCalc ? (
+            <div className="bg-zinc-900 border border-red-900/50 rounded-xl p-3 flex items-center gap-3">
+              {removeCalc.images[0] && <img src={removeCalc.images[0]} alt="" className="w-10 h-10 object-contain bg-zinc-800 rounded flex-shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-mono font-bold text-zinc-100 truncate">{removeCalc.make} {removeCalc.model}</p>
+                <p className="text-[10px] font-mono text-zinc-500">{removeCalc.year_introduced ?? '?'}</p>
+              </div>
+              <button onClick={() => setRemoveCalc(null)} className="text-zinc-600 hover:text-zinc-300 text-sm">✕</button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input value={removeQuery} onChange={e => { setRemoveQuery(e.target.value); search(e.target.value, setRemoveResults); }}
+                placeholder="Search for duplicate calc…"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none focus:border-red-500 transition-colors" />
+              {removeResults.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden shadow-xl">
+                  {removeResults.map(c => (
+                    <button key={c.id} type="button" onClick={() => { setRemoveCalc(c); setRemoveResults([]); setRemoveQuery(''); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-700 transition-colors text-left">
+                      {c.images[0] && <img src={c.images[0]} alt="" className="w-8 h-8 rounded object-contain bg-zinc-900 flex-shrink-0" />}
+                      <div><p className="text-sm font-mono text-zinc-200">{c.make} {c.model}</p><p className="text-[10px] font-mono text-zinc-500">{c.year_introduced ?? '?'}</p></div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {keepCalc && removeCalc && (
+        <button onClick={merge} disabled={merging}
+          className="w-full py-3 bg-red-600 text-white rounded-xl font-mono font-bold text-sm hover:bg-red-500 transition-colors disabled:opacity-50">
+          {merging ? 'Merging…' : `🔀 Merge "${removeCalc.make} ${removeCalc.model}" → "${keepCalc.make} ${keepCalc.model}"`}
+        </button>
+      )}
     </div>
   );
 }

@@ -6,10 +6,13 @@ from sqlalchemy import select, func
 import uuid
 
 from app.api.deps import get_db, get_current_superuser
+from pydantic import BaseModel
 from app.models.user import User
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
+from app.models.comment import Comment
 from app.schemas.user import UserAdminEntry, UserAdminUpdate
+from app.schemas.calculator import CalculatorPublic
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -191,3 +194,91 @@ async def update_user_roles(
     await db.commit()
     await db.refresh(target)
     return target
+
+
+class MergeRequest(BaseModel):
+    keep_id: uuid.UUID
+    remove_id: uuid.UUID
+
+
+@router.post("/calculators/merge")
+async def merge_calculators(
+    payload: MergeRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    """Merge two calculators: transfer all data from remove_id → keep_id, then delete remove_id."""
+    if payload.keep_id == payload.remove_id:
+        raise HTTPException(status_code=400, detail="Cannot merge a calculator with itself")
+
+    keep_r = await db.execute(select(Calculator).where(Calculator.id == payload.keep_id))
+    keep = keep_r.scalar_one_or_none()
+    if not keep:
+        raise HTTPException(status_code=404, detail="keep_id not found")
+
+    remove_r = await db.execute(select(Calculator).where(Calculator.id == payload.remove_id))
+    remove = remove_r.scalar_one_or_none()
+    if not remove:
+        raise HTTPException(status_code=404, detail="remove_id not found")
+
+    # Re-parent variants of the duplicate to the keeper
+    variants_r = await db.execute(
+        select(Calculator).where(Calculator.parent_id == payload.remove_id)
+    )
+    for v in variants_r.scalars().all():
+        v.parent_id = payload.keep_id
+
+    # Move collection entries
+    entries_r = await db.execute(
+        select(CollectionEntry).where(CollectionEntry.calculator_id == payload.remove_id)
+    )
+    for e in entries_r.scalars().all():
+        e.calculator_id = payload.keep_id
+
+    # Move comments
+    comments_r = await db.execute(
+        select(Comment).where(Comment.calculator_id == payload.remove_id)
+    )
+    for c in comments_r.scalars().all():
+        c.calculator_id = payload.keep_id
+
+    # Merge images (add any unique images from remove to keep)
+    merged_images = list(keep.images)
+    for img in (remove.images or []):
+        if img not in merged_images:
+            merged_images.append(img)
+    keep.images = merged_images
+
+    # Merge tags
+    merged_tags = list(set(keep.tags or []) | set(remove.tags or []))
+    keep.tags = merged_tags
+
+    # Fill in missing fields from remove
+    for field in ("description", "fun_facts", "manual_url", "rarity_score",
+                  "weirdness_score", "year_introduced", "year_discontinued",
+                  "display_type", "power_source", "num_keys", "country_of_origin"):
+        if not getattr(keep, field) and getattr(remove, field):
+            setattr(keep, field, getattr(remove, field))
+
+    await db.delete(remove)
+    await db.commit()
+    await db.refresh(keep)
+
+    owner_r = await db.execute(
+        select(func.count(CollectionEntry.id)).where(
+            CollectionEntry.calculator_id == keep.id, CollectionEntry.status == "owned"
+        )
+    )
+    want_r = await db.execute(
+        select(func.count(CollectionEntry.id)).where(
+            CollectionEntry.calculator_id == keep.id, CollectionEntry.status == "wanted"
+        )
+    )
+    variant_r = await db.execute(
+        select(func.count(Calculator.id)).where(Calculator.parent_id == keep.id)
+    )
+    d = {c.key: getattr(keep, c.key) for c in keep.__table__.columns}
+    d["owner_count"] = owner_r.scalar() or 0
+    d["want_count"] = want_r.scalar() or 0
+    d["variant_count"] = variant_r.scalar() or 0
+    return CalculatorPublic.model_validate(d)

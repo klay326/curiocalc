@@ -256,6 +256,10 @@ export function Nav() {
                         className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
                         Feed
                       </Link>
+                      <Link href="/messages" onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                        ✉ Messages
+                      </Link>
                       <div className="border-t border-zinc-800 my-1" />
                       <Link href="/settings" onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">

@@ -236,6 +236,38 @@ export type ForSaleListing = {
   listed_at: string;
 };
 
+export type WantedListing = {
+  entry_id: string;
+  calculator_id: string;
+  make: string;
+  model: string;
+  images: string[];
+  calc_type: string;
+  year_introduced: number | null;
+  notes: string | null;
+  wisher_username: string;
+  wisher_display_name: string | null;
+  wisher_avatar: string | null;
+  wanted_since: string;
+};
+
+export type Message = {
+  id: string;
+  sender_id: string;
+  sender_username: string;
+  sender_display_name: string | null;
+  sender_avatar_url: string | null;
+  recipient_id: string;
+  recipient_username: string;
+  recipient_display_name: string | null;
+  calc_id: string | null;
+  calc_make: string | null;
+  calc_model: string | null;
+  body: string;
+  read: boolean;
+  created_at: string;
+};
+
 export type EditSuggestion = {
   id: string;
   calculator_id: string;
@@ -447,6 +479,11 @@ export const api = {
     },
     updateUser: (id: string, data: { is_superuser?: boolean; is_curator?: boolean; is_active?: boolean }) =>
       request<AdminUser>(`/api/v1/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    merge: (keepId: string, removeId: string) =>
+      request<Calculator>('/api/v1/admin/calculators/merge', {
+        method: 'POST',
+        body: JSON.stringify({ keep_id: keepId, remove_id: removeId }),
+      }),
   },
 
   comments: {
@@ -459,6 +496,17 @@ export const api = {
 
   trade: {
     listings: () => request<ForSaleListing[]>('/api/v1/collections/for-sale'),
+    wanted: () => request<WantedListing[]>('/api/v1/collections/wanted'),
+  },
+
+  messages: {
+    send: (data: { recipient_username: string; body: string; calc_id?: string }) =>
+      request<Message>('/api/v1/messages', { method: 'POST', body: JSON.stringify(data) }),
+    inbox: () => request<{ unread: number; messages: Message[] }>('/api/v1/messages/inbox'),
+    sent: () => request<Message[]>('/api/v1/messages/sent'),
+    unreadCount: () => request<{ count: number }>('/api/v1/messages/unread-count'),
+    markRead: (id: string) => request<void>(`/api/v1/messages/${id}/read`, { method: 'PATCH' }),
+    delete: (id: string) => request<void>(`/api/v1/messages/${id}`, { method: 'DELETE' }),
   },
 
   suggestions: {

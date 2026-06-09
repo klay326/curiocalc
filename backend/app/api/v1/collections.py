@@ -159,6 +159,40 @@ async def delete_entry_photo(
     return entry
 
 
+@router.get("/wanted", response_model=list[dict[str, Any]])
+async def get_wanted_listings(db: AsyncSession = Depends(get_db)):
+    """Public wishlist items — community demand board."""
+    result = await db.execute(
+        select(CollectionEntry, User, Calculator)
+        .join(User, User.id == CollectionEntry.user_id)
+        .join(Calculator, Calculator.id == CollectionEntry.calculator_id)
+        .where(
+            CollectionEntry.status == "wanted",
+            CollectionEntry.visibility == "public",
+        )
+        .order_by(CollectionEntry.created_at.desc())
+        .limit(200)
+    )
+    rows = result.all()
+    out = []
+    for entry, user, calc in rows:
+        out.append({
+            "entry_id": str(entry.id),
+            "calculator_id": str(calc.id),
+            "make": calc.make,
+            "model": calc.model,
+            "images": calc.images,
+            "calc_type": calc.calc_type,
+            "year_introduced": calc.year_introduced,
+            "notes": entry.notes,
+            "wisher_username": user.username,
+            "wisher_display_name": user.display_name,
+            "wisher_avatar": user.avatar_url,
+            "wanted_since": entry.created_at.isoformat(),
+        })
+    return out
+
+
 @router.get("/for-sale", response_model=list[dict[str, Any]])
 async def get_for_sale_listings(db: AsyncSession = Depends(get_db)):
     """All public for-sale listings with basic calculator + seller info."""
