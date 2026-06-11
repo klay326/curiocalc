@@ -68,6 +68,29 @@ async def cached(key: str, ttl: int, fn: Callable[[], Awaitable[Any]]) -> Any:
     return result
 
 
+async def cache_incr(key: str) -> None:
+    """Atomically increment a counter key (used for cache-busting version counters)."""
+    r = await _get_redis()
+    if not r:
+        return
+    try:
+        await r.incr(key)
+    except Exception:
+        pass
+
+
+async def cache_get_int(key: str) -> int:
+    """Return an integer counter key, or 0 if absent."""
+    r = await _get_redis()
+    if not r:
+        return 0
+    try:
+        val = await r.get(key)
+        return int(val) if val else 0
+    except Exception:
+        return 0
+
+
 async def rate_limit_check(key: str, max_requests: int, window: int) -> bool:
     """Sliding counter rate limiter. Returns True if allowed, False if limit exceeded.
     Fails open (returns True) when Redis is unavailable so auth still works."""

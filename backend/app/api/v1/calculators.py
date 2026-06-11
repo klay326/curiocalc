@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 
 import httpx
@@ -7,6 +8,7 @@ from sqlalchemy import distinct, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_staff, get_current_superuser, get_current_user, get_db
+from app.cache import cache_del, cache_get, cache_get_int, cache_incr, cache_set
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.image_submission import ImageSubmission
@@ -16,6 +18,11 @@ from app.services.email import notify_calc_added, notify_calc_deleted, notify_ca
 from app.services.storage import upload_image
 
 router = APIRouter(prefix="/calculators", tags=["calculators"])
+
+
+async def _bust_list_cache() -> None:
+    """Increment the list-cache version so all cached pages are immediately stale."""
+    await cache_incr("calcs:v")
 
 
 async def _with_counts(db: AsyncSession, calc: Calculator) -> CalculatorPublic:
@@ -66,6 +73,16 @@ async def list_calculators(
     skip: int = 0,
     limit: int = Query(40, le=500),
 ):
+    # Cache non-search requests (free-text search has too many distinct param combos)
+    cache_key: str | None = None
+    if not q:
+        version = await cache_get_int("calcs:v")
+        params_sig = f"{version}|{calc_type}|{make}|{tag}|{decade}|{sort}|{order}|{include_variants}|{skip}|{limit}"
+        cache_key = "calcs:list:" + hashlib.md5(params_sig.encode()).hexdigest()
+        hit = await cache_get(cache_key)
+        if hit is not None:
+            return [CalculatorPublic.model_validate(d) for d in hit]
+
     stmt = select(Calculator)
 
     # By default, only show canonical models (no parent) — keeps browse clean
@@ -157,6 +174,9 @@ async def list_calculators(
         if not d["images"] and calc.id in variant_image_map:
             d["images"] = variant_image_map[calc.id]
         out.append(CalculatorPublic.model_validate(d))
+
+    if cache_key:
+        await cache_set(cache_key, [p.model_dump(mode="json") for p in out], ttl=60)
     return out
 
 
@@ -203,49 +223,62 @@ async def get_daily(db: AsyncSession = Depends(get_db)):
 @router.get("/brands", response_model=list[dict])
 async def list_brands(db: AsyncSession = Depends(get_db)):
     """Return all brands with calc counts and a sample image."""
-    rows = await db.execute(
-        select(
-            Calculator.make,
-            func.count(Calculator.id).label("count"),
-        )
+    hit = await cache_get("calcs:brands")
+    if hit is not None:
+        return hit
+
+    # Counts in one query
+    count_r = await db.execute(
+        select(Calculator.make, func.count(Calculator.id).label("count"))
         .where(Calculator.parent_id.is_(None))
         .group_by(Calculator.make)
         .order_by(func.count(Calculator.id).desc())
     )
-    brands = []
-    for row in rows:
-        # Grab first calc with an image for brand thumbnail
-        img_r = await db.execute(
-            select(Calculator.images, Calculator.model)
-            .where(
-                Calculator.make == row.make,
-                func.json_array_length(Calculator.images) > 0,
-            )
-            .order_by(Calculator.rarity_score.desc().nulls_last())
-            .limit(1)
+    brands: dict[str, dict] = {
+        row.make: {"make": row.make, "count": row.count, "image": None, "flagship": None}
+        for row in count_r
+    }
+
+    # Best image per brand in one query using DISTINCT ON (PostgreSQL)
+    img_r = await db.execute(
+        select(Calculator.make, Calculator.images, Calculator.model)
+        .distinct(Calculator.make)
+        .where(
+            Calculator.parent_id.is_(None),
+            func.json_array_length(Calculator.images) > 0,
         )
-        img_row = img_r.first()
-        brands.append({
-            "make": row.make,
-            "count": row.count,
-            "image": img_row.images[0] if img_row and img_row.images else None,
-            "flagship": img_row.model if img_row else None,
-        })
-    return brands
+        .order_by(Calculator.make, Calculator.rarity_score.desc().nulls_last())
+    )
+    for row in img_r:
+        if row.make in brands:
+            brands[row.make]["image"] = row.images[0]
+            brands[row.make]["flagship"] = row.model
+
+    result = list(brands.values())
+    await cache_set("calcs:brands", result, ttl=300)
+    return result
 
 
 @router.get("/makes", response_model=list[str])
 async def list_makes(db: AsyncSession = Depends(get_db)):
+    hit = await cache_get("calcs:makes")
+    if hit is not None:
+        return hit
     result = await db.execute(
         select(distinct(Calculator.make))
         .where(Calculator.parent_id.is_(None))
         .order_by(Calculator.make)
     )
-    return [row[0] for row in result.all()]
+    makes = [row[0] for row in result.all()]
+    await cache_set("calcs:makes", makes, ttl=300)
+    return makes
 
 
 @router.get("/tags", response_model=list[str])
 async def list_tags(db: AsyncSession = Depends(get_db)):
+    hit = await cache_get("calcs:tags")
+    if hit is not None:
+        return hit
     result = await db.execute(
         select(Calculator.tags).where(Calculator.parent_id.is_(None))
     )
@@ -253,7 +286,9 @@ async def list_tags(db: AsyncSession = Depends(get_db)):
     for (tags,) in result.all():
         if tags:
             tag_set.update(tags)
-    return sorted(tag_set)
+    tags_list = sorted(tag_set)
+    await cache_set("calcs:tags", tags_list, ttl=300)
+    return tags_list
 
 
 @router.get("/batch", response_model=list[CalculatorPublic])
@@ -508,6 +543,8 @@ async def create_calculator(
     await db.commit()
     await db.refresh(calc)
     await notify_calc_added(calc.make, calc.model, str(calc.id), current_user.username)
+    await _bust_list_cache()
+    await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
     return await _with_counts(db, calc)
 
 
@@ -538,6 +575,8 @@ async def update_calculator(
     await db.commit()
     await db.refresh(calc)
     await notify_calc_updated(calc.make, calc.model, str(calc.id), current_user.username)
+    await _bust_list_cache()
+    await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
     return await _with_counts(db, calc)
 
 
@@ -555,6 +594,8 @@ async def delete_calculator(
     await db.delete(calc)
     await db.commit()
     await notify_calc_deleted(make, model, current_user.username)
+    await _bust_list_cache()
+    await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
 
 
 @router.post("/{calc_id}/images", response_model=CalculatorPublic)

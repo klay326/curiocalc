@@ -48,6 +48,7 @@ export function CalculatorCard({ calc, compact = false, isAdmin = false, onRemov
           <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
             {calc.images[0] ? (
               <img src={calc.images[0]} alt={`${calc.make} ${calc.model}`}
+                loading="lazy" decoding="async"
                 className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
             ) : (
               <span className="text-3xl opacity-20 select-none">🧮</span>

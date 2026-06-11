@@ -188,7 +188,7 @@ export default function HomePage() {
                   className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800 transition-colors group">
                   <div className="w-8 h-8 flex-shrink-0 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
                     {s.images[0]
-                      ? <img src={s.images[0]} alt="" className="w-full h-full object-contain" />
+                      ? <img src={s.images[0]} alt="" loading="lazy" decoding="async" className="w-full h-full object-contain" />
                       : <span className="text-base opacity-30">🧮</span>}
                   </div>
                   <div className="min-w-0">
@@ -286,7 +286,7 @@ export default function HomePage() {
                     className="group flex-shrink-0 w-20 bg-zinc-900 border border-zinc-800 hover:border-amber-400/30 rounded-lg overflow-hidden transition-colors">
                     <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
                       {c.images[0]
-                        ? <img src={c.images[0]} alt={c.model} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                        ? <img src={c.images[0]} alt={c.model} loading="lazy" decoding="async" className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
                         : <span className="text-xl opacity-20">🧮</span>
                       }
                     </div>
@@ -310,7 +310,7 @@ export default function HomePage() {
                     className="group bg-zinc-900 border border-zinc-800 hover:border-amber-400/30 rounded-lg overflow-hidden transition-colors">
                     <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
                       {c.images[0]
-                        ? <img src={c.images[0]} alt={c.model} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                        ? <img src={c.images[0]} alt={c.model} loading="lazy" decoding="async" className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
                         : <span className="text-xl opacity-20">🧮</span>
                       }
                     </div>
