@@ -340,7 +340,7 @@ export default function NewCalculatorPage() {
                   </div>
                 )}
               </div>
-              <p className="text-[10px] text-zinc-600 font-mono mt-1">Use the full name — e.g. "Texas Instruments", not "TI"</p>
+              <p className="text-[10px] text-zinc-600 font-mono mt-1">Use the short name — e.g. "TI", "HP", "Casio"</p>
             </div>
 
             {/* Model */}
