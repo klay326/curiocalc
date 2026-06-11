@@ -33,6 +33,7 @@ export default function CalculatorPage() {
   const [showAddVariant, setShowAddVariant] = useState(false);
   const [alsoOwned, setAlsoOwned] = useState<Calculator[]>([]);
   const [showEmbed, setShowEmbed] = useState(false);
+  const [showSubmitPhoto, setShowSubmitPhoto] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -388,10 +389,16 @@ export default function CalculatorPage() {
                 </button>
               </>
             ) : user ? (
-              <button onClick={() => setShowSuggest(true)}
-                className="text-xs font-mono text-amber-500/70 hover:text-amber-400 border border-amber-900/30 hover:border-amber-900/60 px-3 py-1.5 rounded-lg transition-colors">
-                ✏ suggest edit
-              </button>
+              <>
+                <button onClick={() => setShowSuggest(true)}
+                  className="text-xs font-mono text-amber-500/70 hover:text-amber-400 border border-amber-900/30 hover:border-amber-900/60 px-3 py-1.5 rounded-lg transition-colors">
+                  ✏ suggest edit
+                </button>
+                <button onClick={() => setShowSubmitPhoto(true)}
+                  className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-colors">
+                  📷 submit photo
+                </button>
+              </>
             ) : null}
           </div>
         </div>
@@ -527,6 +534,11 @@ export default function CalculatorPage() {
       {/* Suggest Edit Modal */}
       {showSuggest && calc && (
         <SuggestEditModal calc={calc} onClose={() => setShowSuggest(false)} />
+      )}
+
+      {/* Submit Photo Modal */}
+      {showSubmitPhoto && calc && (
+        <SubmitPhotoModal calcId={calc.id} onClose={() => setShowSubmitPhoto(false)} />
       )}
 
       {/* Delete Confirmation Modal */}
@@ -1544,6 +1556,87 @@ function CollectionModal({
             {adding ? 'Adding…' : isOwned ? '✓ Add to collection' : '⭐ Add to wishlist'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Submit Photo Modal ────────────────────────────────────────────────────────
+
+function SubmitPhotoModal({ calcId, onClose }: { calcId: string; onClose: () => void }) {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+    setError(null);
+  };
+
+  const submit = async () => {
+    if (!file) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.calculators.submitImage(calcId, file);
+      setDone(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        {done ? (
+          <div className="text-center space-y-3">
+            <div className="text-4xl">📬</div>
+            <h3 className="font-bold font-mono text-zinc-100">Photo submitted!</h3>
+            <p className="text-zinc-400 font-mono text-xs">Thanks! Staff will review it and add it to the gallery if it's a good fit.</p>
+            <button onClick={onClose} className="mt-2 px-4 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors">Done</button>
+          </div>
+        ) : (
+          <>
+            <h3 className="font-bold font-mono text-zinc-100 mb-1">Submit a photo</h3>
+            <p className="text-zinc-500 font-mono text-xs mb-4">Staff will review your photo before it appears on the page.</p>
+            {error && <p className="text-red-400 font-mono text-xs mb-3">{error}</p>}
+
+            <div
+              onClick={() => fileRef.current?.click()}
+              className="border-2 border-dashed border-zinc-700 hover:border-amber-400/50 rounded-xl aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors mb-4"
+            >
+              {preview
+                ? <img src={preview} alt="" className="w-full h-full object-contain" />
+                : <div className="text-center">
+                    <div className="text-4xl mb-2 opacity-30">📷</div>
+                    <p className="text-zinc-500 font-mono text-xs">Click to choose a photo</p>
+                  </div>
+              }
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+
+            <div className="flex gap-2">
+              <button onClick={onClose}
+                className="flex-1 px-4 py-2.5 bg-zinc-800 text-zinc-300 rounded-lg font-mono text-sm hover:bg-zinc-700 border border-zinc-700 transition-colors">
+                Cancel
+              </button>
+              <button onClick={submit} disabled={!file || submitting}
+                className="flex-1 px-4 py-2.5 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
+                {submitting ? 'Uploading…' : 'Submit'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

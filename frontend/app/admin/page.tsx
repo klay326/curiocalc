@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type EditSuggestion, type AdminStats, type AdminUser } from '@/lib/api';
+import { api, type Calculator, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'users' | 'merge'>('stats');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
-        {(['stats', 'calcs', 'users', 'suggestions', 'merge'] as const).map(t => (
+        {(['stats', 'calcs', 'users', 'suggestions', 'photos', 'merge'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -45,10 +45,11 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 'stats'       ? <StatsTab />
-       : tab === 'calcs'     ? <CalcsTab />
-       : tab === 'users'     ? <UsersTab />
-       : tab === 'merge'     ? <MergeTab />
+      {tab === 'stats'        ? <StatsTab />
+       : tab === 'calcs'      ? <CalcsTab />
+       : tab === 'users'      ? <UsersTab />
+       : tab === 'merge'      ? <MergeTab />
+       : tab === 'photos'     ? <PhotosTab />
        : <SuggestionsTab />}
     </div>
   );
@@ -953,5 +954,115 @@ function MergeTab() {
         </button>
       )}
     </div>
+  );
+}
+
+/* ────────────────────────────────── Photos tab ── */
+function PhotosTab() {
+  const [submissions, setSubmissions] = useState<ImageSubmission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected' | ''>('pending');
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setSubmissions(await api.admin.imageSubmissions(filter || undefined)); }
+    finally { setLoading(false); }
+  }, [filter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const review = async (id: string, status: 'approved' | 'rejected') => {
+    setReviewing(id);
+    try {
+      const updated = await api.admin.reviewImageSubmission(id, status, note || undefined);
+      setSubmissions(prev => prev.map(s => s.id === id ? { ...s, ...updated } : s));
+      setNote('');
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+    finally { setReviewing(null); }
+  };
+
+  const pending = submissions.filter(s => s.status === 'pending');
+
+  return (
+    <>
+      <div className="flex gap-2 mb-6">
+        {(['pending', 'approved', 'rejected', ''] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
+              filter === f
+                ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold'
+                : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+            }`}>
+            {f || 'all'}
+            {f === 'pending' && pending.length > 0 && (
+              <span className="ml-1.5 bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{pending.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="text-zinc-600 font-mono text-sm animate-pulse">Loading…</div>
+      ) : submissions.length === 0 ? (
+        <div className="text-center py-16 text-zinc-600 font-mono text-sm">
+          <div className="text-4xl mb-3">📷</div>
+          No photo submissions in this queue.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {submissions.map(s => (
+            <div key={s.id} className={`bg-zinc-900 border rounded-xl overflow-hidden ${
+              s.status === 'pending' ? 'border-amber-900/40' :
+              s.status === 'approved' ? 'border-green-900/40' : 'border-zinc-800'
+            }`}>
+              <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
+                <img src={s.image_url} alt="" className="w-full h-full object-contain" />
+              </div>
+              <div className="p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <Link href={`/calculators/${s.calculator_id}`}
+                      className="font-bold font-mono text-zinc-100 text-xs hover:text-amber-400 transition-colors">
+                      {s.calculator_make} {s.calculator_model}
+                    </Link>
+                    <p className="text-[10px] text-zinc-600 font-mono mt-0.5">
+                      by @{s.submitted_by_username ?? 'unknown'} · {new Date(s.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold flex-shrink-0 ${
+                    s.status === 'pending'  ? 'bg-amber-900/30 text-amber-400' :
+                    s.status === 'approved' ? 'bg-green-900/30 text-green-400' :
+                                              'bg-zinc-800 text-zinc-500'
+                  }`}>{s.status}</span>
+                </div>
+
+                {s.status === 'pending' && (
+                  <div className="space-y-2">
+                    <input value={note} onChange={e => setNote(e.target.value)}
+                      placeholder="Optional note…"
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-200 font-mono text-xs focus:outline-none focus:border-amber-400" />
+                    <div className="flex gap-1.5">
+                      <button onClick={() => review(s.id, 'approved')} disabled={reviewing === s.id}
+                        className="flex-1 px-2 py-1.5 bg-green-900/40 text-green-400 border border-green-900/50 rounded-lg font-mono text-xs font-bold hover:bg-green-900/60 transition-colors disabled:opacity-50">
+                        {reviewing === s.id ? '…' : '✓ approve'}
+                      </button>
+                      <button onClick={() => review(s.id, 'rejected')} disabled={reviewing === s.id}
+                        className="flex-1 px-2 py-1.5 bg-red-900/20 text-red-400 border border-red-900/30 rounded-lg font-mono text-xs hover:bg-red-900/30 transition-colors disabled:opacity-50">
+                        ✕ reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {s.reviewer_note && (
+                  <p className="text-[10px] text-zinc-500 font-mono italic">"{s.reviewer_note}"</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

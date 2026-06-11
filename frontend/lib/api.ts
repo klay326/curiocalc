@@ -283,6 +283,18 @@ export type EditSuggestion = {
   calculator_model: string | null;
 };
 
+export type ImageSubmission = {
+  id: string;
+  image_url: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewer_note: string | null;
+  created_at: string;
+  calculator_id: string;
+  calculator_make: string;
+  calculator_model: string;
+  submitted_by_username: string | null;
+};
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('access_token');
@@ -319,6 +331,14 @@ export const api = {
     register: (data: { email: string; username: string; password: string; display_name?: string; theme?: string }) =>
       request<AuthUser>('/api/v1/auth/register', { method: 'POST', body: JSON.stringify(data) }),
     me: () => request<AuthUser>('/api/v1/users/me'),
+    forgotPassword: (email: string) =>
+      request<void>('/api/v1/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+    resetPassword: (token: string, new_password: string) =>
+      request<void>('/api/v1/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, new_password }) }),
+    sendVerification: () =>
+      request<void>('/api/v1/auth/send-verification', { method: 'POST' }),
+    verifyEmail: (token: string) =>
+      request<void>('/api/v1/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
   },
 
   calculators: {
@@ -369,6 +389,20 @@ export const api = {
       request<Calculator>(`/api/v1/calculators/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<void>(`/api/v1/calculators/${id}`, { method: 'DELETE' }),
+    submitImage: async (id: string, file: File): Promise<void> => {
+      const token = getToken();
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API_URL}/api/v1/calculators/${id}/submit-image`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Upload failed');
+      }
+    },
     uploadImage: async (id: string, file: File): Promise<Calculator> => {
       const token = getToken();
       const form = new FormData();
@@ -483,6 +517,15 @@ export const api = {
       request<Calculator>('/api/v1/admin/calculators/merge', {
         method: 'POST',
         body: JSON.stringify({ keep_id: keepId, remove_id: removeId }),
+      }),
+    imageSubmissions: (status?: string) => {
+      const q = status ? `?status=${status}` : '';
+      return request<ImageSubmission[]>(`/api/v1/admin/image-submissions${q}`);
+    },
+    reviewImageSubmission: (id: string, status: 'approved' | 'rejected', reviewer_note?: string) =>
+      request<ImageSubmission>(`/api/v1/admin/image-submissions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, reviewer_note }),
       }),
   },
 

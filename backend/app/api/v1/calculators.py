@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_staff, get_current_superuser, get_current_user, get_db
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
+from app.models.image_submission import ImageSubmission
 from app.models.user import User
 from app.schemas.calculator import CalculatorCreate, CalculatorPublic, CalculatorUpdate
 from app.services.email import notify_calc_added, notify_calc_deleted, notify_calc_updated
@@ -574,3 +575,26 @@ async def upload_calculator_image(
     await db.commit()
     await db.refresh(calc)
     return await _with_counts(db, calc)
+
+
+@router.post("/{calc_id}/submit-image", status_code=204)
+async def submit_image_for_review(
+    calc_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Any logged-in user can submit a photo for staff review."""
+    result = await db.execute(select(Calculator).where(Calculator.id == calc_id))
+    calc = result.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculator not found")
+
+    url = await upload_image(file, folder=f"submissions/{calc_id}")
+    submission = ImageSubmission(
+        calculator_id=calc_id,
+        submitted_by_id=current_user.id,
+        image_url=url,
+    )
+    db.add(submission)
+    await db.commit()

@@ -36,3 +36,4 @@ class User(Base):
 
     # Relationships
     collection_entries: Mapped[list["CollectionEntry"]] = relationship(back_populates="user", lazy="dynamic")  # noqa: F821
+    image_submissions: Mapped[list["ImageSubmission"]] = relationship(back_populates="submitted_by", lazy="dynamic")  # noqa: F821

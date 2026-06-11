@@ -93,7 +93,9 @@ function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-9 w-80 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-zinc-800 flex items-center justify-between">
-            <p className="text-xs font-mono font-bold text-zinc-300">Notifications</p>
+            <Link href="/notifications" onClick={() => setOpen(false)} className="text-xs font-mono font-bold text-zinc-300 hover:text-amber-400 transition-colors">
+              Notifications
+            </Link>
             {items.length > 0 && (
               <button
                 onClick={() => { api.notifications.markRead().catch(() => {}); setUnread(0); setItems(i => i.map(n => ({ ...n, read: true }))); }}
@@ -110,35 +112,43 @@ function NotificationBell() {
           ) : items.length === 0 ? (
             <p className="px-4 py-8 text-center text-zinc-600 font-mono text-xs">No notifications yet</p>
           ) : (
-            <div className="max-h-80 overflow-y-auto divide-y divide-zinc-800/60">
-              {items.map(n => (
-                <Link
-                  key={n.id}
-                  href={notifHref(n)}
-                  onClick={() => setOpen(false)}
-                  className={`flex gap-3 px-4 py-3 hover:bg-zinc-800/60 transition-colors ${!n.read ? 'bg-amber-400/5' : ''}`}
-                >
-                  <div className="w-7 h-7 rounded-full bg-amber-900/40 border border-amber-900/40 flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden">
-                    {n.actor_avatar_url
-                      ? <img src={n.actor_avatar_url} alt="" className="w-full h-full object-cover" />
-                      : <span className="text-[11px] font-bold text-amber-400 font-mono">
-                          {(n.actor_display_name ?? n.actor_username ?? '?').charAt(0).toUpperCase()}
-                        </span>
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-zinc-300 leading-snug">
-                      {notifLabel(n)}
-                    </p>
-                    {n.body && n.type === 'comment' && (
-                      <p className="text-[10px] font-mono text-zinc-600 mt-0.5 truncate italic">"{n.body}"</p>
-                    )}
-                    <p className="text-[10px] font-mono text-zinc-700 mt-0.5">{timeAgo(n.created_at)}</p>
-                  </div>
-                  {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 mt-1.5" />}
+            <>
+              <div className="max-h-72 overflow-y-auto divide-y divide-zinc-800/60">
+                {items.map(n => (
+                  <Link
+                    key={n.id}
+                    href={notifHref(n)}
+                    onClick={() => setOpen(false)}
+                    className={`flex gap-3 px-4 py-3 hover:bg-zinc-800/60 transition-colors ${!n.read ? 'bg-amber-400/5' : ''}`}
+                  >
+                    <div className="w-7 h-7 rounded-full bg-amber-900/40 border border-amber-900/40 flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden">
+                      {n.actor_avatar_url
+                        ? <img src={n.actor_avatar_url} alt="" className="w-full h-full object-cover" />
+                        : <span className="text-[11px] font-bold text-amber-400 font-mono">
+                            {(n.actor_display_name ?? n.actor_username ?? '?').charAt(0).toUpperCase()}
+                          </span>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-zinc-300 leading-snug">
+                        {notifLabel(n)}
+                      </p>
+                      {n.body && n.type === 'comment' && (
+                        <p className="text-[10px] font-mono text-zinc-600 mt-0.5 truncate italic">"{n.body}"</p>
+                      )}
+                      <p className="text-[10px] font-mono text-zinc-700 mt-0.5">{timeAgo(n.created_at)}</p>
+                    </div>
+                    {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 mt-1.5" />}
+                  </Link>
+                ))}
+              </div>
+              <div className="px-4 py-2.5 border-t border-zinc-800">
+                <Link href="/notifications" onClick={() => setOpen(false)}
+                  className="text-[11px] font-mono text-zinc-500 hover:text-amber-400 transition-colors">
+                  View all notifications →
                 </Link>
-              ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
       )}

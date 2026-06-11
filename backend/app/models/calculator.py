@@ -75,3 +75,4 @@ class Calculator(Base):
         primaryjoin="Calculator.id == foreign(Calculator.parent_id)",
         lazy="select",
     )
+    image_submissions: Mapped[list["ImageSubmission"]] = relationship(back_populates="calculator", lazy="dynamic")  # noqa: F821

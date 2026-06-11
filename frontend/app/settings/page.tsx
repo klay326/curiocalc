@@ -57,6 +57,18 @@ export default function SettingsPage() {
     }
   };
 
+  const [sendingVerification, setSendingVerification] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+
+  const handleSendVerification = async () => {
+    setSendingVerification(true);
+    try {
+      await api.auth.sendVerification();
+      setVerificationSent(true);
+    } catch { /* ignore */ }
+    finally { setSendingVerification(false); }
+  };
+
   const handleGenerateApiKey = async () => {
     setGeneratingKey(true);
     try {
@@ -199,9 +211,24 @@ export default function SettingsPage() {
             <span className="text-zinc-400">@{user.username}</span>
             <span className="text-zinc-700 ml-auto">(cannot change)</span>
           </div>
-          <div className="flex gap-3 text-[11px] font-mono">
+          <div className="flex items-center gap-3 text-[11px] font-mono">
             <span className="text-zinc-600 w-20 flex-shrink-0">Email</span>
             <span className="text-zinc-400">{user.email}</span>
+            {user.is_verified ? (
+              <span className="ml-auto text-[10px] bg-green-950/40 text-green-400 border border-green-900/50 px-1.5 py-0.5 rounded font-mono">✓ verified</span>
+            ) : (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-[10px] text-amber-400/70 font-mono">unverified</span>
+                {verificationSent ? (
+                  <span className="text-[10px] text-zinc-500 font-mono">email sent ✓</span>
+                ) : (
+                  <button onClick={handleSendVerification} disabled={sendingVerification}
+                    className="text-[10px] text-amber-400 hover:text-amber-300 font-mono transition-colors disabled:opacity-50">
+                    {sendingVerification ? 'sending…' : 'verify →'}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

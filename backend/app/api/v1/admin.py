@@ -11,6 +11,7 @@ from app.api.deps import get_current_superuser, get_db
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.comment import Comment
+from app.models.image_submission import ImageSubmission
 from app.models.user import User
 from app.schemas.calculator import CalculatorPublic
 from app.schemas.user import UserAdminEntry, UserAdminUpdate
@@ -289,3 +290,67 @@ async def merge_calculators(
     d["want_count"] = want_r.scalar() or 0
     d["variant_count"] = variant_r.scalar() or 0
     return CalculatorPublic.model_validate(d)
+
+
+# ── Image submissions ─────────────────────────────────────────────────────────
+
+class ImageReviewRequest(BaseModel):
+    status: str  # "approved" or "rejected"
+    reviewer_note: str | None = None
+
+
+@router.get("/image-submissions")
+async def list_image_submissions(
+    status: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    stmt = (
+        select(ImageSubmission, Calculator, User)
+        .join(Calculator, ImageSubmission.calculator_id == Calculator.id)
+        .outerjoin(User, ImageSubmission.submitted_by_id == User.id)
+        .order_by(ImageSubmission.created_at.desc())
+    )
+    if status:
+        stmt = stmt.where(ImageSubmission.status == status)
+    rows = (await db.execute(stmt)).all()
+
+    return [
+        {
+            "id": str(sub.id),
+            "image_url": sub.image_url,
+            "status": sub.status,
+            "reviewer_note": sub.reviewer_note,
+            "created_at": sub.created_at.isoformat(),
+            "calculator_id": str(sub.calculator_id),
+            "calculator_make": calc.make,
+            "calculator_model": calc.model,
+            "submitted_by_username": user.username if user else None,
+        }
+        for sub, calc, user in rows
+    ]
+
+
+@router.patch("/image-submissions/{submission_id}")
+async def review_image_submission(
+    submission_id: uuid.UUID,
+    payload: ImageReviewRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    result = await db.execute(select(ImageSubmission).where(ImageSubmission.id == submission_id))
+    sub = result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    sub.status = payload.status
+    sub.reviewer_note = payload.reviewer_note
+
+    if payload.status == "approved":
+        calc_result = await db.execute(select(Calculator).where(Calculator.id == sub.calculator_id))
+        calc = calc_result.scalar_one_or_none()
+        if calc:
+            calc.images = [*calc.images, sub.image_url]
+
+    await db.commit()
+    return {"id": str(sub.id), "status": sub.status, "reviewer_note": sub.reviewer_note}

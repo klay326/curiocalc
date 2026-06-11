@@ -137,3 +137,37 @@ async def send_comment_email(
         <p><a href="https://curiocalc.org/calculators/{calc_id}">View discussion →</a></p>
         """,
     )
+
+
+async def send_password_reset_email(to_email: str, token: str) -> None:
+    reset_url = f"https://curiocalc.org/reset-password?token={token}"
+    await _send_to(
+        to_email,
+        "Reset your CurioCalc password",
+        f"""
+        <p>We received a request to reset your <strong>CurioCalc</strong> password.</p>
+        <p style="margin:20px 0;">
+          <a href="{reset_url}" style="background:#f59e0b;color:#1c1917;padding:10px 24px;border-radius:8px;font-weight:bold;text-decoration:none;">
+            Reset password →
+          </a>
+        </p>
+        <p style="color:#888;font-size:13px;">This link expires in 1 hour. If you didn't request this, ignore this email.</p>
+        """,
+    )
+
+
+async def send_verification_email(to_email: str, token: str) -> None:
+    verify_url = f"https://curiocalc.org/verify-email?token={token}"
+    await _send_to(
+        to_email,
+        "Verify your CurioCalc email address",
+        f"""
+        <p>Thanks for joining <strong>CurioCalc</strong>! Please verify your email address.</p>
+        <p style="margin:20px 0;">
+          <a href="{verify_url}" style="background:#f59e0b;color:#1c1917;padding:10px 24px;border-radius:8px;font-weight:bold;text-decoration:none;">
+            Verify email →
+          </a>
+        </p>
+        <p style="color:#888;font-size:13px;">This link expires in 24 hours.</p>
+        """,
+    )
