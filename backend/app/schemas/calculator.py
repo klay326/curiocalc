@@ -64,6 +64,7 @@ class CalculatorUpdate(BaseModel):
     rarity_score: float | None = None
     weirdness_score: float | None = None
     is_verified: bool | None = None
+    is_featured: bool | None = None
     parent_id: uuid.UUID | None = None
     variant_label: str | None = None
 
@@ -74,6 +75,7 @@ class CalculatorPublic(CalculatorBase):
     rarity_score: float | None
     weirdness_score: float | None
     is_verified: bool
+    is_featured: bool = False
     created_at: datetime
     updated_at: datetime
     # computed fields

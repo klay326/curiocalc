@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge'>('stats');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge' | 'import'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
-        {(['stats', 'calcs', 'users', 'suggestions', 'photos', 'merge'] as const).map(t => (
+        {(['stats', 'calcs', 'users', 'suggestions', 'photos', 'merge', 'import'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -50,6 +50,7 @@ export default function AdminPage() {
        : tab === 'users'      ? <UsersTab />
        : tab === 'merge'      ? <MergeTab />
        : tab === 'photos'     ? <PhotosTab />
+       : tab === 'import'     ? <ImportTab />
        : <SuggestionsTab />}
     </div>
   );
@@ -1064,5 +1065,109 @@ function PhotosTab() {
         </div>
       )}
     </>
+  );
+}
+
+/* ────────────────────────────────── Import tab ── */
+function ImportTab() {
+  const [file, setFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleImport = async () => {
+    if (!file) return;
+    setImporting(true);
+    setResult(null);
+    setError(null);
+    try {
+      const res = await api.admin.importCsv(file);
+      setResult(res);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-bold font-mono text-zinc-300 mb-1">CSV Bulk Import</h2>
+          <p className="text-[11px] font-mono text-zinc-600">
+            Import multiple calculators at once. Required columns: <code className="text-amber-400/80">make</code>, <code className="text-amber-400/80">model</code>.
+          </p>
+        </div>
+
+        <div className="bg-zinc-800/50 rounded-lg p-4 space-y-1">
+          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2">Optional columns</p>
+          {['year_introduced', 'year_discontinued', 'calc_type', 'display_type', 'power_source',
+            'num_keys', 'country_of_origin', 'description', 'fun_facts', 'manual_url',
+            'variant_label', 'rarity_score', 'weirdness_score', 'tags (comma-separated)'].map(col => (
+            <span key={col} className="inline-block mr-2 mb-1 text-[10px] font-mono bg-zinc-800 border border-zinc-700 text-zinc-400 px-2 py-0.5 rounded">
+              {col}
+            </span>
+          ))}
+        </div>
+
+        {error && (
+          <div className="bg-red-950/40 border border-red-800/50 text-red-400 font-mono text-xs px-3 py-2 rounded-lg">{error}</div>
+        )}
+
+        {result && (
+          <div className="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4 space-y-2">
+            <div className="flex gap-6">
+              <div>
+                <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Created</p>
+                <p className="text-2xl font-bold font-mono text-green-400">{result.created}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Skipped</p>
+                <p className="text-2xl font-bold font-mono text-zinc-400">{result.skipped}</p>
+              </div>
+              {result.errors.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Errors</p>
+                  <p className="text-2xl font-bold font-mono text-red-400">{result.errors.length}</p>
+                </div>
+              )}
+            </div>
+            {result.errors.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {result.errors.map((e, i) => (
+                  <p key={i} className="text-[10px] font-mono text-red-400/80">{e}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <label className={`cursor-pointer px-4 py-2 bg-zinc-800 border border-zinc-700 hover:border-amber-400/50 text-zinc-300 font-mono text-xs rounded-lg transition-colors ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
+            {file ? file.name : 'Choose CSV file'}
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={e => { setFile(e.target.files?.[0] ?? null); setResult(null); }}
+            />
+          </label>
+          <button
+            onClick={handleImport}
+            disabled={!file || importing}
+            className="px-5 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-40"
+          >
+            {importing ? 'Importing…' : '⬆ Import'}
+          </button>
+          {file && !importing && (
+            <button
+              onClick={() => { setFile(null); setResult(null); }}
+              className="text-xs font-mono text-zinc-600 hover:text-zinc-400 transition-colors"
+            >✕ clear</button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -32,6 +32,20 @@ async def update_me(
     return current_user
 
 
+@router.post("/me/avatar", response_model=UserMe)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload a profile avatar image — replaces any existing avatar."""
+    url = await upload_image(file, folder=f"avatars/{current_user.id}")
+    current_user.avatar_url = url
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
 @router.post("/me/collection-photos", response_model=UserMe)
 async def upload_collection_photo(
     file: UploadFile = File(...),

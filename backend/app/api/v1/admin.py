@@ -1,13 +1,16 @@
 """Admin-only endpoints — require superuser token."""
+import csv
+import io
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_superuser, get_db
+from app.cache import cache_del, cache_incr
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.comment import Comment
@@ -354,3 +357,117 @@ async def review_image_submission(
 
     await db.commit()
     return {"id": str(sub.id), "status": sub.status, "reviewer_note": sub.reviewer_note}
+
+
+# ── Featured calculator ───────────────────────────────────────────────────────
+
+@router.post("/calculators/{calc_id}/feature", response_model=CalculatorPublic)
+async def feature_calculator(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    """Pin a calculator as the featured calc (unfeatures any previously featured one)."""
+    calc_r = await db.execute(select(Calculator).where(Calculator.id == calc_id))
+    calc = calc_r.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculator not found")
+
+    # Unfeature everyone else
+    await db.execute(
+        update(Calculator).where(Calculator.is_featured.is_(True)).values(is_featured=False)
+    )
+    calc.is_featured = True
+    await db.commit()
+    await db.refresh(calc)
+    await cache_incr("calcs:v")
+    d = {c.key: getattr(calc, c.key) for c in calc.__table__.columns}
+    d["owner_count"] = 0
+    d["want_count"] = 0
+    d["variant_count"] = 0
+    return CalculatorPublic.model_validate(d)
+
+
+@router.delete("/calculators/{calc_id}/feature", status_code=204)
+async def unfeature_calculator(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    """Remove the featured pin from a calculator."""
+    await db.execute(
+        update(Calculator).where(Calculator.id == calc_id).values(is_featured=False)
+    )
+    await db.commit()
+    await cache_incr("calcs:v")
+
+
+# ── CSV bulk import ───────────────────────────────────────────────────────────
+
+_CSV_OPTIONAL_INT = {"year_introduced", "year_discontinued", "num_keys"}
+_CSV_OPTIONAL_FLOAT = {"rarity_score", "weirdness_score"}
+_CSV_OPTIONAL_STR = {"calc_type", "display_type", "power_source", "country_of_origin", "description", "fun_facts", "manual_url", "variant_label"}
+
+
+@router.post("/calculators/import-csv")
+async def import_calculators_csv(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    """Bulk-import calculators from a CSV file. Required columns: make, model."""
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    created: list[str] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+
+    for i, row in enumerate(reader, start=2):
+        make = row.get("make", "").strip()
+        model = row.get("model", "").strip()
+        if not make or not model:
+            errors.append(f"Row {i}: missing make or model")
+            continue
+
+        existing = await db.execute(
+            select(Calculator).where(Calculator.make == make, Calculator.model == model)
+        )
+        if existing.scalar_one_or_none():
+            skipped.append(f"{make} {model}")
+            continue
+
+        try:
+            kwargs: dict = {"make": make, "model": model, "calc_type": "other"}
+            for field in _CSV_OPTIONAL_INT:
+                val = row.get(field, "").strip()
+                if val:
+                    kwargs[field] = int(val)
+            for field in _CSV_OPTIONAL_FLOAT:
+                val = row.get(field, "").strip()
+                if val:
+                    kwargs[field] = float(val)
+            for field in _CSV_OPTIONAL_STR:
+                val = row.get(field, "").strip()
+                if val:
+                    kwargs[field] = val
+            if row.get("calc_type", "").strip():
+                kwargs["calc_type"] = row["calc_type"].strip()
+            tags_raw = row.get("tags", "").strip()
+            if tags_raw:
+                kwargs["tags"] = [t.strip() for t in tags_raw.split(",") if t.strip()]
+            db.add(Calculator(**kwargs))
+            created.append(f"{make} {model}")
+        except Exception as exc:
+            errors.append(f"Row {i} ({make} {model}): {exc}")
+
+    if created:
+        await db.commit()
+        await cache_incr("calcs:v")
+        await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
+
+    return {"created": len(created), "skipped": len(skipped), "errors": errors}

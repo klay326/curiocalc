@@ -867,6 +867,25 @@ function AdminEditPanel({
   const [weirdness, setWeirdness]         = useState(String(calc.weirdness_score ?? ''));
   const [tagsRaw, setTagsRaw]             = useState(calc.tags.join(', '));
   const [isVerified, setIsVerified]       = useState(calc.is_verified ?? false);
+  const [isFeatured, setIsFeatured]       = useState(calc.is_featured ?? false);
+  const [featuringSaving, setFeaturingSaving] = useState(false);
+
+  const toggleFeature = async () => {
+    setFeaturingSaving(true);
+    try {
+      if (isFeatured) {
+        await api.admin.unfeatureCalculator(calc.id);
+        setIsFeatured(false);
+      } else {
+        await api.admin.featureCalculator(calc.id);
+        setIsFeatured(true);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Feature toggle failed');
+    } finally {
+      setFeaturingSaving(false);
+    }
+  };
 
   // Images — editable list + file upload
   const [images, setImages]       = useState<string[]>(calc.images);
@@ -1146,16 +1165,28 @@ function AdminEditPanel({
       {/* ── Flags ── */}
       <section>
         <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-1">Flags</p>
-        <label className="flex items-center gap-3 cursor-pointer group">
-          <div onClick={() => setIsVerified(v => !v)}
-            className={`w-10 h-5 rounded-full transition-colors relative ${isVerified ? 'bg-amber-400' : 'bg-zinc-700'}`}>
-            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${isVerified ? 'left-5' : 'left-0.5'}`} />
-          </div>
-          <span className="text-sm font-mono text-zinc-300 group-hover:text-zinc-100 transition-colors">
-            Verified
-            <span className="ml-2 text-[10px] text-zinc-600">(shows gold badge on detail page)</span>
-          </span>
-        </label>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <div onClick={() => setIsVerified(v => !v)}
+              className={`w-10 h-5 rounded-full transition-colors relative ${isVerified ? 'bg-amber-400' : 'bg-zinc-700'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${isVerified ? 'left-5' : 'left-0.5'}`} />
+            </div>
+            <span className="text-sm font-mono text-zinc-300 group-hover:text-zinc-100 transition-colors">
+              Verified
+              <span className="ml-2 text-[10px] text-zinc-600">(shows gold badge on detail page)</span>
+            </span>
+          </label>
+          <label className={`flex items-center gap-3 group ${featuringSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+            <div onClick={featuringSaving ? undefined : toggleFeature}
+              className={`w-10 h-5 rounded-full transition-colors relative ${isFeatured ? 'bg-amber-400' : 'bg-zinc-700'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${isFeatured ? 'left-5' : 'left-0.5'}`} />
+            </div>
+            <span className="text-sm font-mono text-zinc-300 group-hover:text-zinc-100 transition-colors">
+              Featured
+              <span className="ml-2 text-[10px] text-zinc-600">(pinned as daily pick — unfeaturing others)</span>
+            </span>
+          </label>
+        </div>
       </section>
 
       {/* ── Variants (only shown on base models, not on variant entries) ── */}

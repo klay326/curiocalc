@@ -197,24 +197,30 @@ async def get_random(db: AsyncSession = Depends(get_db)):
 
 @router.get("/daily", response_model=CalculatorPublic)
 async def get_daily(db: AsyncSession = Depends(get_db)):
-    """Return the calculator of the day — stable within a UTC calendar day."""
-    from datetime import date as _date
-    day_num = (_date.today() - _date(2024, 1, 1)).days  # days since epoch
-
-    count_r = await db.execute(
-        select(func.count(Calculator.id)).where(Calculator.parent_id.is_(None))
+    """Return the featured calc if one is pinned, else the daily rotating pick."""
+    # Prefer admin-pinned calc
+    featured_r = await db.execute(
+        select(Calculator).where(Calculator.is_featured.is_(True)).limit(1)
     )
-    total = count_r.scalar() or 1
-    offset = day_num % total
+    calc = featured_r.scalar_one_or_none()
 
-    result = await db.execute(
-        select(Calculator)
-        .where(Calculator.parent_id.is_(None))
-        .order_by(Calculator.id)      # stable alphabetical-ish sort
-        .offset(offset)
-        .limit(1)
-    )
-    calc = result.scalar_one_or_none()
+    if not calc:
+        from datetime import date as _date
+        day_num = (_date.today() - _date(2024, 1, 1)).days
+        count_r = await db.execute(
+            select(func.count(Calculator.id)).where(Calculator.parent_id.is_(None))
+        )
+        total = count_r.scalar() or 1
+        offset = day_num % total
+        result = await db.execute(
+            select(Calculator)
+            .where(Calculator.parent_id.is_(None))
+            .order_by(Calculator.id)
+            .offset(offset)
+            .limit(1)
+        )
+        calc = result.scalar_one_or_none()
+
     if not calc:
         raise HTTPException(status_code=404, detail="No calculators found")
     return await _with_counts(db, calc)

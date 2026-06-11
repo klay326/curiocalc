@@ -57,6 +57,7 @@ export default function SettingsPage() {
     }
   };
 
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
 
@@ -188,20 +189,48 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Avatar URL */}
+        {/* Avatar */}
         <div>
           <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-1.5">
-            Avatar URL
+            Avatar
           </label>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 rounded-full border border-zinc-700 overflow-hidden bg-zinc-800 flex items-center justify-center flex-shrink-0">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-lg font-bold text-amber-400 font-mono">
+                  {(user?.display_name ?? user?.username ?? '?').charAt(0).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <label className={`cursor-pointer px-3 py-1.5 bg-zinc-800 border border-zinc-700 hover:border-amber-400/50 text-zinc-300 font-mono text-xs rounded-lg transition-colors ${uploadingAvatar ? 'opacity-50 pointer-events-none' : ''}`}>
+              {uploadingAvatar ? 'Uploading…' : 'Upload photo'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingAvatar}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploadingAvatar(true);
+                  try {
+                    const updated = await api.users.uploadAvatar(file);
+                    setAvatarUrl(updated.avatar_url ?? '');
+                    await refreshUser();
+                  } catch {}
+                  finally { setUploadingAvatar(false); e.target.value = ''; }
+                }}
+              />
+            </label>
+          </div>
           <input
             value={avatarUrl}
             onChange={e => setAvatarUrl(e.target.value)}
-            placeholder="https://gravatar.com/…"
+            placeholder="or paste a URL — Gravatar, Imgur, etc."
             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors"
           />
-          <p className="text-[10px] text-zinc-600 font-mono mt-1">
-            Link to a profile photo — Gravatar, Imgur, etc.
-          </p>
         </div>
 
         {/* Read-only info */}

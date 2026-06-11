@@ -45,6 +45,45 @@ export async function generateMetadata({
   }
 }
 
-export default function Page() {
-  return <CalculatorClientPage />;
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  let jsonLd: Record<string, unknown> | null = null;
+  try {
+    const res = await fetch(`${API_URL}/api/v1/calculators/${id}`, {
+      next: { revalidate: 3600 },
+    });
+    if (res.ok) {
+      const calc = await res.json();
+      jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: `${calc.make} ${calc.model}`,
+        brand: { '@type': 'Brand', name: calc.make },
+        ...(calc.description && { description: calc.description }),
+        ...(calc.images?.[0] && { image: calc.images[0] }),
+        ...(calc.year_introduced && { productionDate: String(calc.year_introduced) }),
+        offers: {
+          '@type': 'AggregateOffer',
+          offerCount: calc.owner_count ?? 0,
+          availability: 'https://schema.org/LimitedAvailability',
+        },
+      };
+    }
+  } catch { /* non-critical — page still renders */ }
+
+  return (
+    <>
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
+      <CalculatorClientPage />
+    </>
+  );
 }

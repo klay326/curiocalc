@@ -17,6 +17,7 @@ export type Calculator = {
   rarity_score: number | null;
   weirdness_score: number | null;
   is_verified: boolean;
+  is_featured: boolean;
   tags: string[];
   manual_url: string | null;
   external_refs: Array<{ label: string; url: string }>;
@@ -481,6 +482,21 @@ export const api = {
     },
     generateApiKey: () =>
       request<AuthUser>('/api/v1/users/me/api-key', { method: 'POST' }),
+    uploadAvatar: async (file: File): Promise<AuthUser> => {
+      const token = getToken();
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API_URL}/api/v1/users/me/avatar`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Upload failed');
+      }
+      return res.json();
+    },
     uploadShelfPhoto: async (file: File): Promise<AuthUser> => {
       const token = getToken();
       const form = new FormData();
@@ -527,6 +543,25 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ status, reviewer_note }),
       }),
+    featureCalculator: (id: string) =>
+      request<Calculator>(`/api/v1/admin/calculators/${id}/feature`, { method: 'POST' }),
+    unfeatureCalculator: (id: string) =>
+      request<void>(`/api/v1/admin/calculators/${id}/feature`, { method: 'DELETE' }),
+    importCsv: async (file: File): Promise<{ created: number; skipped: number; errors: string[] }> => {
+      const token = getToken();
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`${API_URL}/api/v1/admin/calculators/import-csv`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Import failed');
+      }
+      return res.json();
+    },
   },
 
   comments: {
