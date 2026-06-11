@@ -285,7 +285,7 @@ export function Nav() {
 
   return (
     <>
-      <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
+      <nav className="nav-safe-top border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 font-mono font-bold text-amber-400 hover:text-amber-300 transition-colors flex-shrink-0">

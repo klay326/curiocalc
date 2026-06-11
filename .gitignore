@@ -36,3 +36,11 @@ Thumbs.db
 *.sqlite
 caddy_data/
 caddy_config/
+
+# Capacitor native build artifacts (keep source, ignore outputs)
+frontend/ios/Pods/
+frontend/ios/App/App.xcworkspace/xcuserdata/
+frontend/ios/DerivedData/
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
