@@ -5,6 +5,27 @@ import Link from 'next/link';
 import { api, type Calculator, type BrandSummary } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
+// Maps common alternate spellings/names → canonical make stored in the DB
+const BRAND_ALIASES: Record<string, string> = {
+  'texas instruments': 'TI',
+  'ti': 'TI',
+  'hewlett packard': 'HP',
+  'hewlett-packard': 'HP',
+  'hp': 'HP',
+  'sharp': 'Sharp',
+  'canon': 'Canon',
+  'casio': 'Casio',
+  'citizen': 'Citizen',
+  'sanyo': 'Sanyo',
+  'panasonic': 'Panasonic',
+  'rockwell': 'Rockwell',
+  'national semiconductor': 'National Semiconductor',
+  'national': 'National Semiconductor',
+  'commodore': 'Commodore',
+  'sinclair': 'Sinclair',
+  'fx': 'Casio',
+};
+
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
 const DISPLAY_TYPES = ['LCD','LED','VFD','color LCD','nixie tube','CRT','e-paper','thermal paper','mechanical','relay'];
 const COMMON_COUNTRIES = ['Japan','USA','Taiwan','China','Germany','UK','France','Italy','South Korea','Hong Kong'];
@@ -143,10 +164,19 @@ export default function NewCalculatorPage() {
     }, 350);
   }, [parentSearch, parentCalc]);
 
-  // Filtered brand suggestions — contains match, sorted by count
+  // Resolve alias → canonical name (e.g. "Texas Instruments" → "TI")
+  const resolveAlias = (input: string): string | null => {
+    return BRAND_ALIASES[input.toLowerCase().trim()] ?? null;
+  };
+
+  // Filtered brand suggestions — contains match + alias match, sorted by count
   const filteredBrands = form.make.trim()
     ? brands
-        .filter(b => b.make.toLowerCase().includes(form.make.toLowerCase()) && b.make.toLowerCase() !== form.make.toLowerCase())
+        .filter(b => {
+          const q = form.make.toLowerCase();
+          return (b.make.toLowerCase().includes(q) || b.make.toLowerCase() === resolveAlias(form.make)?.toLowerCase())
+            && b.make.toLowerCase() !== form.make.toLowerCase();
+        })
         .sort((a, b) => b.count - a.count)
         .slice(0, 8)
     : [];
@@ -275,26 +305,38 @@ export default function NewCalculatorPage() {
               <label className="label">Make *</label>
               <div className="relative">
                 <input
-                  type="text" value={form.make} required placeholder="Texas Instruments"
+                  type="text" value={form.make} required placeholder="TI, HP, Casio…"
                   onChange={set('make')}
                   onFocus={() => setShowBrandList(true)}
+                  onBlur={() => {
+                    const canonical = resolveAlias(form.make);
+                    if (canonical) setForm(prev => ({ ...prev, make: canonical }));
+                  }}
                   className="input"
                 />
                 {showBrandList && filteredBrands.length > 0 && (
                   <div className="absolute z-20 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden shadow-xl">
-                    {filteredBrands.map(b => (
-                      <button key={b.make} type="button"
-                        onClick={() => { setForm(prev => ({ ...prev, make: b.make })); setShowBrandList(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 transition-colors text-left">
-                        {b.image ? (
-                          <img src={b.image} alt="" className="w-6 h-6 rounded object-contain bg-zinc-900 flex-shrink-0" />
-                        ) : (
-                          <div className="w-6 h-6 rounded bg-zinc-700 flex-shrink-0" />
-                        )}
-                        <span className="flex-1 text-sm font-mono text-zinc-200">{b.make}</span>
-                        <span className="text-[10px] font-mono text-zinc-600 flex-shrink-0">{b.count} calc{b.count !== 1 ? 's' : ''}</span>
-                      </button>
-                    ))}
+                    {filteredBrands.map(b => {
+                      const aliasCanonical = resolveAlias(form.make);
+                      const isAliasMatch = aliasCanonical?.toLowerCase() === b.make.toLowerCase()
+                        && b.make.toLowerCase() !== form.make.toLowerCase();
+                      return (
+                        <button key={b.make} type="button"
+                          onClick={() => { setForm(prev => ({ ...prev, make: b.make })); setShowBrandList(false); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 transition-colors text-left">
+                          {b.image ? (
+                            <img src={b.image} alt="" className="w-6 h-6 rounded object-contain bg-zinc-900 flex-shrink-0" />
+                          ) : (
+                            <div className="w-6 h-6 rounded bg-zinc-700 flex-shrink-0" />
+                          )}
+                          <span className="flex-1 text-sm font-mono text-zinc-200">{b.make}</span>
+                          {isAliasMatch && (
+                            <span className="text-[10px] font-mono text-amber-600/70 flex-shrink-0">aka {form.make}</span>
+                          )}
+                          <span className="text-[10px] font-mono text-zinc-600 flex-shrink-0 ml-1">{b.count} calc{b.count !== 1 ? 's' : ''}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
