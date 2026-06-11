@@ -9,6 +9,67 @@ import { CalculatorCard } from '@/components/calculator-card';
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
 const DISPLAY_TYPES = ['LCD','LED','VFD','color LCD','nixie tube','CRT','e-paper','thermal paper','mechanical','relay'];
 
+// ─── Lightbox ────────────────────────────────────────────────────────────────
+
+function LightboxModal({ images, active, onClose, onNav }: {
+  images: string[];
+  active: number;
+  onClose: () => void;
+  onNav: (i: number) => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && active > 0) onNav(active - 1);
+      if (e.key === 'ArrowRight' && active < images.length - 1) onNav(active + 1);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [active, images.length, onClose, onNav]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/92"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-5 text-white/60 hover:text-white font-mono text-2xl leading-none transition-colors"
+        aria-label="Close"
+      >
+        ✕
+      </button>
+      {active > 0 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onNav(active - 1); }}
+          className="absolute left-4 text-white/50 hover:text-white text-4xl font-mono leading-none transition-colors select-none"
+        >
+          ‹
+        </button>
+      )}
+      {active < images.length - 1 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onNav(active + 1); }}
+          className="absolute right-4 text-white/50 hover:text-white text-4xl font-mono leading-none transition-colors select-none"
+        >
+          ›
+        </button>
+      )}
+      <img
+        src={images[active]}
+        alt={`Image ${active + 1}`}
+        className="max-h-[88vh] max-w-[88vw] object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+      {images.length > 1 && (
+        <div className="absolute bottom-4 text-white/50 font-mono text-xs">
+          {active + 1} / {images.length}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CalculatorPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -34,6 +95,7 @@ export default function CalculatorPage() {
   const [alsoOwned, setAlsoOwned] = useState<Calculator[]>([]);
   const [showEmbed, setShowEmbed] = useState(false);
   const [showSubmitPhoto, setShowSubmitPhoto] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -142,7 +204,8 @@ export default function CalculatorPage() {
               <img
                 src={calc.images[activeImg]}
                 alt={`${calc.make} ${calc.model}`}
-                className="w-full h-full object-contain"
+                className="w-full h-full object-contain cursor-zoom-in"
+                onClick={() => setLightboxOpen(true)}
               />
             ) : (
               <span className="text-8xl opacity-10 select-none">🧮</span>
@@ -602,6 +665,16 @@ export default function CalculatorPage() {
             />
           )}
         </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxOpen && calc.images.length > 0 && (
+        <LightboxModal
+          images={calc.images}
+          active={activeImg}
+          onClose={() => setLightboxOpen(false)}
+          onNav={(i) => setActiveImg(i)}
+        />
       )}
     </div>
   );
@@ -1226,6 +1299,10 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
   const [rating, setRating] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editRating, setEditRating] = useState(0);
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     api.comments.list(calcId)
@@ -1251,6 +1328,26 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const startEdit = (c: Comment) => {
+    setEditingId(c.id);
+    setEditContent(c.content);
+    setEditRating(c.rating ?? 0);
+  };
+
+  const handleSaveEdit = async (commentId: string) => {
+    if (!editContent.trim()) return;
+    setEditSaving(true);
+    try {
+      const updated = await api.comments.update(commentId, {
+        content: editContent.trim(),
+        rating: editRating || null,
+      });
+      setComments(prev => prev.map(c => c.id === commentId ? updated : c));
+      setEditingId(null);
+    } catch {}
+    finally { setEditSaving(false); }
   };
 
   const handleDelete = async (commentId: string) => {
@@ -1344,13 +1441,21 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
                   </span>
                 </div>
                 <span className="text-xs font-mono text-zinc-400">{c.display_name ?? `@${c.username}`}</span>
-                {c.rating && (
+                {c.rating && editingId !== c.id && (
                   <span className="text-amber-400 text-xs font-mono">{'★'.repeat(c.rating)}{'☆'.repeat(5 - c.rating)}</span>
                 )}
                 <span className="text-[10px] text-zinc-700 font-mono ml-auto">
                   {new Date(c.created_at).toLocaleDateString()}
                 </span>
-                {(currentUser?.id === c.user_id || currentUser?.is_superuser) && (
+                {currentUser?.id === c.user_id && editingId !== c.id && (
+                  <button
+                    onClick={() => startEdit(c)}
+                    className="text-[10px] font-mono text-zinc-700 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    edit
+                  </button>
+                )}
+                {(currentUser?.id === c.user_id || currentUser?.is_superuser) && editingId !== c.id && (
                   <button
                     onClick={() => handleDelete(c.id)}
                     className="text-[10px] font-mono text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
@@ -1359,7 +1464,38 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
                   </button>
                 )}
               </div>
-              <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line">{c.content}</p>
+              {editingId === c.id ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <StarRating value={editRating} onChange={setEditRating} />
+                    {editRating > 0 && <span className="text-[10px] font-mono text-zinc-600">{editRating}/5</span>}
+                  </div>
+                  <textarea
+                    value={editContent}
+                    onChange={e => setEditContent(e.target.value)}
+                    rows={3}
+                    maxLength={2000}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors resize-none"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="px-3 py-1 font-mono text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                      cancel
+                    </button>
+                    <button
+                      onClick={() => handleSaveEdit(c.id)}
+                      disabled={editSaving || !editContent.trim()}
+                      className="px-4 py-1 bg-amber-400 text-zinc-950 rounded-lg font-mono text-xs font-bold hover:bg-amber-300 transition-colors disabled:opacity-40"
+                    >
+                      {editSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line">{c.content}</p>
+              )}
             </div>
           ))}
         </div>

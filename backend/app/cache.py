@@ -66,3 +66,18 @@ async def cached(key: str, ttl: int, fn: Callable[[], Awaitable[Any]]) -> Any:
     result = await fn()
     await cache_set(key, result, ttl)
     return result
+
+
+async def rate_limit_check(key: str, max_requests: int, window: int) -> bool:
+    """Sliding counter rate limiter. Returns True if allowed, False if limit exceeded.
+    Fails open (returns True) when Redis is unavailable so auth still works."""
+    r = await _get_redis()
+    if not r:
+        return True
+    try:
+        count = await r.incr(key)
+        if count == 1:
+            await r.expire(key, window)
+        return count <= max_requests
+    except Exception:
+        return True

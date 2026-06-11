@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,6 +105,32 @@ async def create_comment(
                 )
 
     return _to_public(comment, current_user)
+
+
+class CommentUpdate(BaseModel):
+    content: str
+    rating: int | None = None
+
+
+@router.patch("/comments/{comment_id}", response_model=CommentPublic)
+async def update_comment(
+    comment_id: uuid.UUID,
+    payload: CommentUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Comment, User).join(User, User.id == Comment.user_id).where(Comment.id == comment_id))
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    comment, user = row
+    if comment.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    comment.content = payload.content
+    comment.rating = payload.rating
+    await db.commit()
+    await db.refresh(comment)
+    return _to_public(comment, user)
 
 
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

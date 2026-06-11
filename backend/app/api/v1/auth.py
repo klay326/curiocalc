@@ -1,13 +1,13 @@
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
-from app.cache import cache_del, cache_get, cache_set
+from app.cache import cache_del, cache_get, cache_set, rate_limit_check
 from app.models.user import User
 from app.schemas.user import UserCreate, UserMe
 from app.services.auth import (
@@ -29,7 +29,10 @@ class Token(BaseModel):
 
 
 @router.post("/register", response_model=UserMe, status_code=status.HTTP_201_CREATED)
-async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, payload: UserCreate, db: AsyncSession = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
+    if not await rate_limit_check(f"rl:register:{ip}", max_requests=5, window=3600):
+        raise HTTPException(status_code=429, detail="Too many registration attempts. Try again in an hour.")
     existing = await db.execute(
         select(User).where((User.email == payload.email) | (User.username == payload.username))
     )
@@ -58,7 +61,10 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
+    if not await rate_limit_check(f"rl:login:{ip}", max_requests=10, window=300):
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in 5 minutes.")
     result = await db.execute(select(User).where(User.email == form.username))
     user = result.scalar_one_or_none()
 
@@ -107,7 +113,10 @@ class ResetPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password", status_code=204)
-async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password(request: Request, payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
+    if not await rate_limit_check(f"rl:forgot:{ip}", max_requests=5, window=3600):
+        raise HTTPException(status_code=429, detail="Too many reset attempts. Try again in an hour.")
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     # Always return 204 to avoid email enumeration

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, type FeedItem } from '@/lib/api';
@@ -41,24 +41,43 @@ function Avatar({ user }: { user: FeedItem['user'] }) {
   );
 }
 
+const PAGE_SIZE = 20;
+
 export default function FeedPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [empty, setEmpty] = useState(false);
+  const skipRef = useRef(0);
 
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push('/login'); return; }
-    api.users.feed()
+    skipRef.current = 0;
+    api.users.feed({ limit: PAGE_SIZE, skip: 0 })
       .then(data => {
         setItems(data);
         setEmpty(data.length === 0);
+        setHasMore(data.length === PAGE_SIZE);
+        skipRef.current = data.length;
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user, authLoading, router]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const data = await api.users.feed({ limit: PAGE_SIZE, skip: skipRef.current });
+      setItems(prev => [...prev, ...data]);
+      setHasMore(data.length === PAGE_SIZE);
+      skipRef.current += data.length;
+    } catch {}
+    finally { setLoadingMore(false); }
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
@@ -144,6 +163,22 @@ export default function FeedPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Load more */}
+      {!loading && !empty && hasMore && (
+        <div className="mt-8 text-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-mono text-xs rounded-lg transition-colors disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
+      {!loading && !empty && !hasMore && items.length > PAGE_SIZE && (
+        <p className="mt-8 text-center text-zinc-700 font-mono text-xs">You're all caught up</p>
       )}
     </div>
   );

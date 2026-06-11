@@ -533,6 +533,8 @@ export const api = {
     list: (calcId: string) => request<Comment[]>(`/api/v1/calculators/${calcId}/comments`),
     create: (calcId: string, data: { content: string; rating?: number | null }) =>
       request<Comment>(`/api/v1/calculators/${calcId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
+    update: (commentId: string, data: { content: string; rating?: number | null }) =>
+      request<Comment>(`/api/v1/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (commentId: string) =>
       request<void>(`/api/v1/comments/${commentId}`, { method: 'DELETE' }),
   },
