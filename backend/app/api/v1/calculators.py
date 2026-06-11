@@ -234,13 +234,19 @@ async def list_brands(db: AsyncSession = Depends(get_db)):
 
 @router.get("/makes", response_model=list[str])
 async def list_makes(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(distinct(Calculator.make)).order_by(Calculator.make))
+    result = await db.execute(
+        select(distinct(Calculator.make))
+        .where(Calculator.parent_id.is_(None))
+        .order_by(Calculator.make)
+    )
     return [row[0] for row in result.all()]
 
 
 @router.get("/tags", response_model=list[str])
 async def list_tags(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Calculator.tags))
+    result = await db.execute(
+        select(Calculator.tags).where(Calculator.parent_id.is_(None))
+    )
     tag_set: set[str] = set()
     for (tags,) in result.all():
         if tags:
@@ -325,6 +331,7 @@ async def get_related(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     stmt = (
         select(Calculator)
         .where(Calculator.id != calc_id)
+        .where(Calculator.parent_id.is_(None))
         .where(or_(Calculator.make == calc.make, Calculator.calc_type == calc.calc_type))
         .order_by(
             (Calculator.make != calc.make).asc(),
@@ -473,7 +480,11 @@ async def get_also_owned(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     ids = [row.calculator_id for row in rows_r]
     if not ids:
         return []
-    result = await db.execute(select(Calculator).where(Calculator.id.in_(ids)))
+    result = await db.execute(
+        select(Calculator)
+        .where(Calculator.id.in_(ids))
+        .where(Calculator.parent_id.is_(None))
+    )
     calcs = {c.id: c for c in result.scalars().all()}
     return [
         CalculatorPublic.model_validate(

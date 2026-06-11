@@ -36,22 +36,23 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
         select(func.count(Calculator.id)).where(Calculator.description.isnot(None))
     )).scalar() or 0
 
-    # Top 8 brands by calc count
+    # Top 8 brands by calc count (base models only)
     top_brands_r = await db.execute(
         select(Calculator.make, func.count(Calculator.id).label("cnt"))
+        .where(Calculator.parent_id.is_(None))
         .group_by(Calculator.make)
         .order_by(func.count(Calculator.id).desc())
         .limit(8)
     )
     top_brands = [{"make": row.make, "count": row.cnt} for row in top_brands_r]
 
-    # Decade breakdown
+    # Decade breakdown (base models only)
     decades_r = await db.execute(
         select(
             (func.floor(Calculator.year_introduced / 10) * 10).label("decade"),
             func.count(Calculator.id).label("cnt"),
         )
-        .where(Calculator.year_introduced.isnot(None))
+        .where(Calculator.year_introduced.isnot(None), Calculator.parent_id.is_(None))
         .group_by("decade")
         .order_by("decade")
     )
@@ -135,9 +136,10 @@ async def get_trending(db: AsyncSession = Depends(get_db)):
     )
     trending_wanted_ids = [row.calculator_id for row in wanted_r]
 
-    # Newest additions to the DB
+    # Newest additions to the DB (base models only)
     new_r = await db.execute(
         select(Calculator)
+        .where(Calculator.parent_id.is_(None))
         .order_by(Calculator.created_at.desc())
         .limit(12)
     )

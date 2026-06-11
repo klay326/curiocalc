@@ -56,18 +56,23 @@ async def admin_stats(
         for row in recent_users_r
     ]
 
-    # ── Calc stats ───────────────────────────────────────────────────
-    total_calcs = (await db.execute(select(func.count(Calculator.id)))).scalar() or 0
+    # ── Calc stats (base models only — variants excluded) ────────────
+    total_calcs = (await db.execute(
+        select(func.count(Calculator.id)).where(Calculator.parent_id.is_(None))
+    )).scalar() or 0
     calcs_week = (await db.execute(
-        select(func.count(Calculator.id)).where(Calculator.created_at >= week_ago)
+        select(func.count(Calculator.id))
+        .where(Calculator.created_at >= week_ago, Calculator.parent_id.is_(None))
     )).scalar() or 0
     calcs_month = (await db.execute(
-        select(func.count(Calculator.id)).where(Calculator.created_at >= month_ago)
+        select(func.count(Calculator.id))
+        .where(Calculator.created_at >= month_ago, Calculator.parent_id.is_(None))
     )).scalar() or 0
 
-    # Recent calc additions
+    # Recent calc additions (base models only)
     recent_calcs_r = await db.execute(
         select(Calculator.id, Calculator.make, Calculator.model, Calculator.created_at)
+        .where(Calculator.parent_id.is_(None))
         .order_by(Calculator.created_at.desc())
         .limit(10)
     )
@@ -124,9 +129,10 @@ async def admin_stats(
         for row in most_collected_r
     ]
 
-    # ── Calc types breakdown ─────────────────────────────────────────
+    # ── Calc types breakdown (base models only) ──────────────────────
     types_r = await db.execute(
         select(Calculator.calc_type, func.count(Calculator.id).label("cnt"))
+        .where(Calculator.parent_id.is_(None))
         .group_by(Calculator.calc_type)
         .order_by(func.count(Calculator.id).desc())
     )
