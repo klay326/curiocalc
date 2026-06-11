@@ -36,7 +36,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: poetry install
+        run: poetry install --no-root
 
       - name: Lint
         working-directory: backend
@@ -48,7 +48,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://curiocalc:testpass@localhost:5432/curiocalc_test
           SECRET_KEY: test-secret-key-not-for-production
           REDIS_URL: redis://localhost:6379
-        run: poetry run pytest tests/ -v
+        run: poetry run pytest tests/ -v --tb=short
 
   frontend:
     name: Frontend build
@@ -66,3 +66,5 @@ jobs:
 
       - run: npm run build
         working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://api.curiocalc.org
