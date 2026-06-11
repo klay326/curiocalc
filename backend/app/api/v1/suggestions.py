@@ -1,15 +1,16 @@
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 import uuid
+from datetime import UTC, datetime
 
-from app.api.deps import get_db, get_current_user, get_current_superuser
-from app.models.user import User
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_superuser, get_current_user, get_db
 from app.models.calculator import Calculator
 from app.models.suggestion import EditSuggestion
-from app.schemas.suggestion import SuggestionCreate, SuggestionReview, SuggestionPublic
+from app.models.user import User
 from app.schemas.calculator import CalculatorUpdate
+from app.schemas.suggestion import SuggestionCreate, SuggestionPublic, SuggestionReview
 
 router = APIRouter(tags=["suggestions"])
 
@@ -105,7 +106,7 @@ async def review_suggestion(
     suggestion.status = payload.status
     suggestion.reviewer_id = reviewer.id
     suggestion.reviewer_note = payload.reviewer_note
-    suggestion.reviewed_at = datetime.now(timezone.utc)
+    suggestion.reviewed_at = datetime.now(UTC)
 
     if payload.status == "approved":
         calc_r = await db.execute(select(Calculator).where(Calculator.id == suggestion.calculator_id))

@@ -1,15 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 import uuid
 from typing import Any
 
-from app.api.deps import get_db, get_current_user
-from app.models.user import User
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user, get_db
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.notification import Notification
-from app.schemas.collection import CollectionEntryCreate, CollectionEntryUpdate, CollectionEntryPublic
+from app.models.user import User
+from app.schemas.collection import (
+    CollectionEntryCreate,
+    CollectionEntryPublic,
+    CollectionEntryUpdate,
+)
 from app.services.storage import upload_image
 
 router = APIRouter(prefix="/collections", tags=["collections"])

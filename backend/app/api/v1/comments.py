@@ -1,14 +1,15 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.api.deps import get_db, get_current_user
-from app.models.comment import Comment
-from app.models.user import User
-from app.models.collection import CollectionEntry
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user, get_db
 from app.models.calculator import Calculator
+from app.models.collection import CollectionEntry
+from app.models.comment import Comment
 from app.models.notification import Notification
+from app.models.user import User
 from app.schemas.comment import CommentCreate, CommentPublic
 from app.services.email import send_comment_email
 

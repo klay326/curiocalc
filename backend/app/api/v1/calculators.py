@@ -1,17 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
-from fastapi.responses import Response
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, distinct, text
 import uuid
-import httpx
 
-from app.api.deps import get_db, get_current_user, get_current_superuser, get_current_staff
-from app.models.user import User
+import httpx
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
+from sqlalchemy import distinct, func, or_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_staff, get_current_superuser, get_current_user, get_db
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
-from app.schemas.calculator import CalculatorCreate, CalculatorUpdate, CalculatorPublic
+from app.models.user import User
+from app.schemas.calculator import CalculatorCreate, CalculatorPublic, CalculatorUpdate
+from app.services.email import notify_calc_added, notify_calc_deleted, notify_calc_updated
 from app.services.storage import upload_image
-from app.services.email import notify_calc_added, notify_calc_updated, notify_calc_deleted
 
 router = APIRouter(prefix="/calculators", tags=["calculators"])
 

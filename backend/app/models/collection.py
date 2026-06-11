@@ -1,20 +1,22 @@
-import uuid
 import enum
-from datetime import datetime, date
-from sqlalchemy import String, DateTime, Date, Float, Text, ForeignKey, JSON, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+import uuid
+from datetime import date, datetime
+
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.db.base import Base
 
 
-class CollectionStatus(str, enum.Enum):
+class CollectionStatus(enum.StrEnum):
     OWNED = "owned"
     WANTED = "wanted"
     FOR_SALE = "for_sale"
     TRADED_AWAY = "traded_away"
 
 
-class Condition(str, enum.Enum):
+class Condition(enum.StrEnum):
     MINT = "mint"
     EXCELLENT = "excellent"
     GOOD = "good"
@@ -22,7 +24,7 @@ class Condition(str, enum.Enum):
     POOR = "poor"
 
 
-class Visibility(str, enum.Enum):
+class Visibility(enum.StrEnum):
     PUBLIC = "public"
     FOLLOWERS = "followers"
     PRIVATE = "private"

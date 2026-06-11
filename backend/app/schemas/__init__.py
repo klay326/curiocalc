@@ -1,3 +1,10 @@
-from app.schemas.user import UserCreate, UserUpdate, UserPublic, UserMe
-from app.schemas.calculator import CalculatorCreate, CalculatorUpdate, CalculatorPublic
-from app.schemas.collection import CollectionEntryCreate, CollectionEntryUpdate, CollectionEntryPublic
+from app.schemas.calculator import CalculatorCreate as CalculatorCreate
+from app.schemas.calculator import CalculatorPublic as CalculatorPublic
+from app.schemas.calculator import CalculatorUpdate as CalculatorUpdate
+from app.schemas.collection import CollectionEntryCreate as CollectionEntryCreate
+from app.schemas.collection import CollectionEntryPublic as CollectionEntryPublic
+from app.schemas.collection import CollectionEntryUpdate as CollectionEntryUpdate
+from app.schemas.user import UserCreate as UserCreate
+from app.schemas.user import UserMe as UserMe
+from app.schemas.user import UserPublic as UserPublic
+from app.schemas.user import UserUpdate as UserUpdate

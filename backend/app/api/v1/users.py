@@ -1,13 +1,14 @@
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
-from app.api.deps import get_db, get_current_user, get_optional_user
-from app.models.user import User
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user, get_db, get_optional_user
 from app.models.collection import CollectionEntry
 from app.models.follow import Follow
-from app.schemas.user import UserPublic, UserUpdate, UserMe, UserProfile
+from app.models.user import User
+from app.schemas.user import UserMe, UserProfile, UserUpdate
 from app.services.storage import upload_image
 
 router = APIRouter(prefix="/users", tags=["users"])

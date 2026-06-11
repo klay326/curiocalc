@@ -1,5 +1,4 @@
 """Basic smoke tests — verify the app imports and config loads cleanly."""
-import pytest
 
 
 def test_settings_load():
@@ -10,9 +9,9 @@ def test_settings_load():
 
 def test_models_import():
     from app.models.calculator import Calculator
-    from app.models.user import User
     from app.models.collection import CollectionEntry
     from app.models.message import Message
+    from app.models.user import User
     assert Calculator.__tablename__ == "calculators"
     assert User.__tablename__ == "users"
     assert CollectionEntry.__tablename__ == "collection_entries"
@@ -20,7 +19,7 @@ def test_models_import():
 
 
 def test_schemas_import():
-    from app.schemas.calculator import CalculatorPublic, CalculatorCreate
+    from app.schemas.calculator import CalculatorCreate, CalculatorPublic
     from app.schemas.user import UserMe, UserProfile
     assert CalculatorPublic
     assert CalculatorCreate

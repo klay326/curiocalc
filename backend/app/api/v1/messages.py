@@ -1,13 +1,14 @@
 import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, and_
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_current_user, get_db
+from app.models.calculator import Calculator
 from app.models.message import Message
 from app.models.user import User
-from app.models.calculator import Calculator
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 

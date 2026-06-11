@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Boolean, Text, func
-from sqlalchemy.types import JSON
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from sqlalchemy import Boolean, DateTime, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
+
 from app.db.base import Base
 
 

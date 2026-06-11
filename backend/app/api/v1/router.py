@@ -1,5 +1,18 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, users, calculators, collections, suggestions, stats, admin, comments, follows, notifications, messages
+
+from app.api.v1 import (
+    admin,
+    auth,
+    calculators,
+    collections,
+    comments,
+    follows,
+    messages,
+    notifications,
+    stats,
+    suggestions,
+    users,
+)
 
 api_router = APIRouter()
 

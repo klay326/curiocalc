@@ -1,13 +1,14 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, distinct
-from datetime import datetime, timedelta, timezone
 
 from app.api.deps import get_db
+from app.cache import cache_get, cache_set
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.user import User
-from app.cache import cache_get, cache_set
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -95,7 +96,7 @@ async def get_trending(db: AsyncSession = Depends(get_db)):
     if hit is not None:
         return hit
 
-    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    week_ago = datetime.now(UTC) - timedelta(days=7)
     from app.schemas.calculator import CalculatorPublic
 
     async def fetch_calcs(ids: list) -> list:

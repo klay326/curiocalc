@@ -1,18 +1,19 @@
 """Admin-only endpoints — require superuser token."""
-from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 import uuid
+from datetime import datetime, timedelta
 
-from app.api.deps import get_db, get_current_superuser
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from app.models.user import User
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_superuser, get_db
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.comment import Comment
-from app.schemas.user import UserAdminEntry, UserAdminUpdate
+from app.models.user import User
 from app.schemas.calculator import CalculatorPublic
+from app.schemas.user import UserAdminEntry, UserAdminUpdate
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

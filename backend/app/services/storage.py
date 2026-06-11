@@ -10,10 +10,12 @@ All uploads are compressed/resized via Pillow before storing.
 import io
 import os
 import uuid
+
 import boto3
 from botocore.config import Config
 from fastapi import UploadFile
 from PIL import Image
+
 from app.config import settings
 
 _MAX_PX = 2048   # longest edge in pixels

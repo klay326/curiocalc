@@ -1,7 +1,10 @@
 """Simple Redis cache helpers. All functions silently no-op if Redis is unavailable."""
 import json
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 import redis.asyncio as aioredis
+
 from app.config import settings
 
 _redis: aioredis.Redis | None = None

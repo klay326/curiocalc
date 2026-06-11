@@ -1,15 +1,14 @@
-import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
-from app.models.user import User
-from app.models.follow import Follow
-from app.models.collection import CollectionEntry
+from app.api.deps import get_current_user, get_db
 from app.models.calculator import Calculator
+from app.models.collection import CollectionEntry
+from app.models.follow import Follow
 from app.models.notification import Notification
+from app.models.user import User
 from app.schemas.user import UserPublic
 from app.services.email import send_follow_email
 
