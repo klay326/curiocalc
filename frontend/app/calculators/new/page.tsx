@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator } from '@/lib/api';
+import { api, type Calculator, type BrandSummary } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
@@ -19,7 +19,7 @@ type Form = {
 
 const EMPTY: Form = {
   make:'', model:'', year_introduced:'', year_discontinued:'', calc_type:'scientific',
-  display_type:'LCD', power_source:'', num_keys:'', country_of_origin:'',
+  display_type:'', power_source:'', num_keys:'', country_of_origin:'',
   description:'', fun_facts:'', manual_url:'', tags:'', variant_label:'', image_urls:'',
   rarity_score:'', weirdness_score:'',
 };
@@ -60,11 +60,24 @@ export default function NewCalculatorPage() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState('');
 
-  // Make autocomplete
-  const [makes, setMakes] = useState<string[]>([]);
-  const [showMakeList, setShowMakeList] = useState(false);
-  const makeRef = useRef<HTMLDivElement>(null);
+  // Brand autocomplete
+  const [brands, setBrands] = useState<BrandSummary[]>([]);
+  const [showBrandList, setShowBrandList] = useState(false);
+  const brandRef = useRef<HTMLDivElement>(null);
+
+  // Tag autocomplete
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [showTagList, setShowTagList] = useState(false);
+  const tagRef = useRef<HTMLDivElement>(null);
+
+  // Image file uploads (queued until after calc is created)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Advanced section collapse
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Variant parent search
   const [parentSearch, setParentSearch] = useState('');
@@ -78,13 +91,15 @@ export default function NewCalculatorPage() {
   const dupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    api.calculators.makes().then(setMakes).catch(() => {});
+    api.calculators.brands().then(setBrands).catch(() => {});
+    api.calculators.tags().then(setAllTags).catch(() => {});
   }, []);
 
-  // Close make dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (makeRef.current && !makeRef.current.contains(e.target as Node)) setShowMakeList(false);
+      if (brandRef.current && !brandRef.current.contains(e.target as Node)) setShowBrandList(false);
+      if (tagRef.current && !tagRef.current.contains(e.target as Node)) setShowTagList(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -94,7 +109,6 @@ export default function NewCalculatorPage() {
     const v = e.target.value;
     setForm(prev => ({ ...prev, [k]: v }));
 
-    // Trigger duplicate check when make or model changes
     if (k === 'make' || k === 'model') {
       if (dupTimer.current) clearTimeout(dupTimer.current);
       const newMake = k === 'make' ? v : form.make;
@@ -129,14 +143,33 @@ export default function NewCalculatorPage() {
     }, 350);
   }, [parentSearch, parentCalc]);
 
-  const filteredMakes = makes.filter(m =>
-    form.make && m.toLowerCase().startsWith(form.make.toLowerCase()) && m.toLowerCase() !== form.make.toLowerCase()
-  ).slice(0, 8);
+  // Filtered brand suggestions — contains match, sorted by count
+  const filteredBrands = form.make.trim()
+    ? brands
+        .filter(b => b.make.toLowerCase().includes(form.make.toLowerCase()) && b.make.toLowerCase() !== form.make.toLowerCase())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+    : [];
+
+  // Current tag being typed (last comma-separated token)
+  const tagTokens = form.tags.split(',');
+  const currentTagInput = tagTokens[tagTokens.length - 1].trim().toLowerCase();
+  const filteredTags = currentTagInput.length >= 1
+    ? allTags
+        .filter(t => t.toLowerCase().includes(currentTagInput) && !tagTokens.slice(0, -1).map(s => s.trim()).includes(t))
+        .slice(0, 8)
+    : [];
+
+  const selectTag = (tag: string) => {
+    const prefix = tagTokens.slice(0, -1).join(', ');
+    setForm(prev => ({ ...prev, tags: prefix ? `${prefix}, ${tag}, ` : `${tag}, ` }));
+    setShowTagList(false);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) { setError('You must be logged in.'); return; }
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setLoadingStatus('Creating calculator…');
     try {
       const imageList = form.image_urls
         .split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
@@ -163,11 +196,23 @@ export default function NewCalculatorPage() {
       if (form.weirdness_score) payload.weirdness_score = parseFloat(form.weirdness_score);
 
       const calc = await api.calculators.create(payload);
+
+      // Upload any pending files after the calc exists
+      if (pendingFiles.length > 0) {
+        let updated = calc;
+        for (let i = 0; i < pendingFiles.length; i++) {
+          setLoadingStatus(`Uploading image ${i + 1} of ${pendingFiles.length}…`);
+          try { updated = await api.calculators.uploadImage(calc.id, pendingFiles[i]); } catch { /* non-fatal */ }
+        }
+        void updated;
+      }
+
       router.push(`/calculators/${calc.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add calculator');
     } finally {
       setLoading(false);
+      setLoadingStatus('');
     }
   };
 
@@ -203,11 +248,10 @@ export default function NewCalculatorPage() {
 
       <form onSubmit={submit} className="space-y-6">
 
-        {/* Identity */}
+        {/* ── Identity ── */}
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
           <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Identity</h2>
 
-          {/* Duplicate warning */}
           {dupWarning.length > 0 && (
             <div className="bg-amber-950/30 border border-amber-900/50 rounded-lg p-3 space-y-2">
               <p className="text-[10px] font-mono text-amber-400 uppercase tracking-wider">⚠ Similar entry already exists</p>
@@ -226,35 +270,91 @@ export default function NewCalculatorPage() {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Make with autocomplete */}
-            <div className="relative" ref={makeRef}>
+            {/* Brand with rich autocomplete */}
+            <div ref={brandRef}>
               <label className="label">Make *</label>
-              <input
-                type="text" value={form.make} required placeholder="Texas Instruments"
-                onChange={set('make')}
-                onFocus={() => setShowMakeList(true)}
-                className="input"
-              />
-              {showMakeList && filteredMakes.length > 0 && (
-                <div className="absolute z-20 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden shadow-xl">
-                  {filteredMakes.map(m => (
-                    <button key={m} type="button"
-                      onClick={() => { setForm(prev => ({ ...prev, make: m })); setShowMakeList(false); }}
-                      className="w-full text-left px-3 py-2 text-sm font-mono text-zinc-300 hover:bg-zinc-700 transition-colors">
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="relative">
+                <input
+                  type="text" value={form.make} required placeholder="Texas Instruments"
+                  onChange={set('make')}
+                  onFocus={() => setShowBrandList(true)}
+                  className="input"
+                />
+                {showBrandList && filteredBrands.length > 0 && (
+                  <div className="absolute z-20 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden shadow-xl">
+                    {filteredBrands.map(b => (
+                      <button key={b.make} type="button"
+                        onClick={() => { setForm(prev => ({ ...prev, make: b.make })); setShowBrandList(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 transition-colors text-left">
+                        {b.image ? (
+                          <img src={b.image} alt="" className="w-6 h-6 rounded object-contain bg-zinc-900 flex-shrink-0" />
+                        ) : (
+                          <div className="w-6 h-6 rounded bg-zinc-700 flex-shrink-0" />
+                        )}
+                        <span className="flex-1 text-sm font-mono text-zinc-200">{b.make}</span>
+                        <span className="text-[10px] font-mono text-zinc-600 flex-shrink-0">{b.count} calc{b.count !== 1 ? 's' : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-zinc-600 font-mono mt-1">Use the full name — e.g. "Texas Instruments", not "TI"</p>
             </div>
 
-            <Field label="Model *" value={form.model} onChange={set('model')} required placeholder="TI-84 Plus" />
+            {/* Model */}
+            <div>
+              <label className="label">Model *</label>
+              <input
+                type="text" value={form.model} required placeholder="TI-84 Plus"
+                onChange={set('model')}
+                className="input"
+              />
+              <p className="text-[10px] text-zinc-600 font-mono mt-1">Include the brand prefix — e.g. "TI-84 Plus", "HP-42S"</p>
+            </div>
+
             <Field label="Year introduced" value={form.year_introduced} onChange={set('year_introduced')} placeholder="1984" type="number" />
             <Field label="Year discontinued" value={form.year_discontinued} onChange={set('year_discontinued')} placeholder="still in production" type="number" />
           </div>
         </section>
 
-        {/* Classification */}
+        {/* ── Images ── */}
+        <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
+          <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Images</h2>
+
+          {/* Pending file list */}
+          {pendingFiles.length > 0 && (
+            <div className="space-y-1.5">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2">
+                  <span className="text-xs font-mono text-zinc-400 flex-1 truncate">{f.name}</span>
+                  <span className="text-[10px] font-mono text-zinc-600">{(f.size / 1024).toFixed(0)} KB</span>
+                  <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}
+                    className="text-zinc-600 hover:text-red-400 transition-colors text-xs ml-1">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={e => { if (e.target.files) setPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value = ''; }} />
+          <button type="button" onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-zinc-800 border border-dashed border-zinc-600 hover:border-amber-400/50 text-zinc-500 hover:text-zinc-300 rounded-lg font-mono text-xs transition-colors">
+            <span className="text-base">📁</span> Upload images from computer
+          </button>
+
+          <div>
+            <p className="text-[10px] text-zinc-600 font-mono mb-1.5">Or paste image URLs (one per line)</p>
+            <textarea
+              value={form.image_urls}
+              onChange={set('image_urls')}
+              placeholder={'https://example.com/front.jpg\nhttps://example.com/back.jpg'}
+              rows={2}
+              className="input resize-none font-mono text-xs"
+            />
+          </div>
+        </section>
+
+        {/* ── Classification ── */}
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
           <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Classification</h2>
           <div className="grid grid-cols-2 gap-4">
@@ -275,11 +375,7 @@ export default function NewCalculatorPage() {
             <Field label="Number of keys" value={form.num_keys} onChange={set('num_keys')} placeholder="40" type="number" />
             <div className="col-span-2">
               <label className="label">Country of origin</label>
-              <select
-                value={form.country_of_origin}
-                onChange={set('country_of_origin')}
-                className="select"
-              >
+              <select value={form.country_of_origin} onChange={set('country_of_origin')} className="select">
                 <option value="">— unknown —</option>
                 {COMMON_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -287,54 +383,52 @@ export default function NewCalculatorPage() {
           </div>
         </section>
 
-        {/* Scores */}
-        <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-5">
-          <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Scores <span className="text-zinc-700 normal-case">(optional)</span></h2>
-          <ScoreSlider
-            label="Rarity"
-            desc="How hard is it to find? 1 = common, 10 = museum-only"
-            value={form.rarity_score}
-            onChange={v => setForm(prev => ({ ...prev, rarity_score: v }))}
-          />
-          <ScoreSlider
-            label="Weirdness"
-            desc="How strange or unusual is it? 1 = boring, 10 = what is this thing"
-            value={form.weirdness_score}
-            onChange={v => setForm(prev => ({ ...prev, weirdness_score: v }))}
-          />
-        </section>
-
-        {/* Images */}
-        <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-          <div>
-            <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Images</h2>
-            <p className="text-[10px] text-zinc-600 font-mono mt-0.5">One URL per line. You can also upload files after saving.</p>
-          </div>
-          <textarea
-            value={form.image_urls}
-            onChange={set('image_urls')}
-            placeholder={'https://example.com/calculator-front.jpg\nhttps://example.com/calculator-back.jpg'}
-            rows={3}
-            className="input resize-none font-mono text-xs"
-          />
-        </section>
-
-        {/* Description */}
+        {/* ── Description ── */}
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
           <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Description</h2>
           <TextArea label="Description" value={form.description} onChange={set('description')}
             placeholder="What makes this calculator special? Its history, use, notable features…" rows={4} />
-          <TextArea label="Fun facts / lore" value={form.fun_facts} onChange={set('fun_facts')}
-            placeholder="Weird quirks, famous uses, collector notes…" rows={3} />
-          <Field label="Manual URL" value={form.manual_url} onChange={set('manual_url')} placeholder="https://…" />
-          <Field label="Tags (comma-separated)" value={form.tags} onChange={set('tags')} placeholder="graphing, school, iconic, TI" />
+
+          {/* Tags with autocomplete */}
+          <div ref={tagRef}>
+            <label className="label">Tags</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={form.tags}
+                onChange={set('tags')}
+                onFocus={() => setShowTagList(true)}
+                placeholder="graphing, school, iconic, rpn"
+                className="input"
+              />
+              {showTagList && filteredTags.length > 0 && (
+                <div className="absolute z-20 w-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden shadow-xl">
+                  {filteredTags.map(t => (
+                    <button key={t} type="button"
+                      onClick={() => selectTag(t)}
+                      className="w-full text-left px-3 py-2 text-sm font-mono text-zinc-300 hover:bg-zinc-700 transition-colors">
+                      #{t}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-zinc-600 font-mono mt-1">Comma-separated. Type to see existing tags.</p>
+            {form.tags && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {form.tags.split(',').map(t => t.trim()).filter(Boolean).map(t => (
+                  <span key={t} className="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded font-mono border border-zinc-700">#{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
-        {/* Color & Variant */}
+        {/* ── Color & Variant ── */}
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
           <div>
             <h2 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Color &amp; Variant</h2>
-            <p className="text-[10px] text-zinc-600 font-mono mt-0.5">Leave blank if this is a one-off or the only version of this model</p>
+            <p className="text-[10px] text-zinc-600 font-mono mt-0.5">Leave blank if this is a standalone model</p>
           </div>
 
           <Field label="Color or edition name" value={form.variant_label} onChange={set('variant_label')}
@@ -343,10 +437,9 @@ export default function NewCalculatorPage() {
           {form.variant_label.trim() && (
             <div>
               <p className="text-[10px] font-mono text-zinc-500 mb-2">
-                Is this a color/variant of an existing model already in the database?
-                <span className="text-zinc-600"> (leave blank if adding the first/only version)</span>
+                Is this a color/variant of an existing model?
+                <span className="text-zinc-600"> (leave blank if this is the only version)</span>
               </p>
-
               {parentCalc ? (
                 <div className="flex items-center justify-between bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5">
                   <div>
@@ -360,12 +453,8 @@ export default function NewCalculatorPage() {
                 </div>
               ) : (
                 <div className="relative">
-                  <input
-                    type="text" value={parentSearch}
-                    onChange={e => setParentSearch(e.target.value)}
-                    placeholder="Search for base model…"
-                    className="input pr-8"
-                  />
+                  <input type="text" value={parentSearch} onChange={e => setParentSearch(e.target.value)}
+                    placeholder="Search for base model…" className="input pr-8" />
                   {searching && (
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs animate-pulse">…</span>
                   )}
@@ -390,11 +479,40 @@ export default function NewCalculatorPage() {
           )}
         </section>
 
+        {/* ── Advanced (collapsed by default) ── */}
+        <section className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <button type="button" onClick={() => setShowAdvanced(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-800/40 transition-colors">
+            <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Advanced details</span>
+            <span className={`text-zinc-600 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+
+          {showAdvanced && (
+            <div className="px-5 pb-5 space-y-5 border-t border-zinc-800 pt-4">
+              <TextArea label="Fun facts / lore" value={form.fun_facts} onChange={set('fun_facts')}
+                placeholder="Weird quirks, famous uses, collector notes…" rows={3} />
+              <Field label="Manual URL" value={form.manual_url} onChange={set('manual_url')} placeholder="https://…" />
+              <ScoreSlider
+                label="Rarity"
+                desc="How hard is it to find? 1 = common, 10 = museum-only"
+                value={form.rarity_score}
+                onChange={v => setForm(prev => ({ ...prev, rarity_score: v }))}
+              />
+              <ScoreSlider
+                label="Weirdness"
+                desc="How strange or unusual is it? 1 = boring, 10 = what is this thing"
+                value={form.weirdness_score}
+                onChange={v => setForm(prev => ({ ...prev, weirdness_score: v }))}
+              />
+            </div>
+          )}
+        </section>
+
         <button
           type="submit" disabled={loading}
           className="w-full bg-amber-400 text-zinc-950 rounded-xl py-3 font-mono font-bold text-sm hover:bg-amber-300 transition-colors disabled:opacity-50"
         >
-          {loading ? 'Adding…' : '+ Add to database'}
+          {loading ? loadingStatus || 'Adding…' : '+ Add to database'}
         </button>
       </form>
     </div>
