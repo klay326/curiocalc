@@ -1,16 +1,24 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
 
-export const THEMES = ['obsidian', 'crimson', 'terminal', 'ocean', 'ember', 'paper'] as const;
+export const THEMES = ['obsidian', 'crimson', 'terminal', 'ocean', 'ember', 'paper', 'linen', 'slate'] as const;
 export type Theme = typeof THEMES[number];
 
-export const THEME_META: Record<Theme, { label: string; dot: string; description: string }> = {
-  obsidian: { label: 'Obsidian', dot: '#f59e0b', description: 'Charcoal & amber gold' },
-  crimson:  { label: 'Crimson',  dot: '#ef2222', description: 'Dark with red accent' },
-  terminal: { label: 'Terminal', dot: '#22c55e', description: 'Phosphor green on black' },
-  ocean:    { label: 'Ocean',    dot: '#38bdf8', description: 'Deep navy & sky blue' },
-  ember:    { label: 'Ember',    dot: '#f97316', description: 'Warm dark & copper glow' },
-  paper:    { label: 'Paper',    dot: '#b45309', description: 'Warm ivory light mode' },
+export const THEME_META: Record<Theme, {
+  label: string;
+  dot: string;
+  description: string;
+  bg: string;
+  mode: 'dark' | 'light';
+}> = {
+  obsidian: { label: 'Obsidian', dot: '#f59e0b', description: 'Charcoal & amber',      bg: '#141414', mode: 'dark'  },
+  crimson:  { label: 'Crimson',  dot: '#ef2222', description: 'Dark & red',             bg: '#141414', mode: 'dark'  },
+  terminal: { label: 'Terminal', dot: '#22c55e', description: 'Phosphor green',         bg: '#061006', mode: 'dark'  },
+  ocean:    { label: 'Ocean',    dot: '#38bdf8', description: 'Navy & sky blue',        bg: '#05101e', mode: 'dark'  },
+  ember:    { label: 'Ember',    dot: '#f97316', description: 'Warm & copper',          bg: '#180e08', mode: 'dark'  },
+  paper:    { label: 'Paper',    dot: '#b45309', description: 'Warm ivory',             bg: '#f5ede0', mode: 'light' },
+  linen:    { label: 'Linen',    dot: '#4f46e5', description: 'Soft white & indigo',   bg: '#fafaf8', mode: 'light' },
+  slate:    { label: 'Slate',    dot: '#0284c7', description: 'Cool white & blue',     bg: '#f8fafc', mode: 'light' },
 };
 
 interface ThemeCtx {

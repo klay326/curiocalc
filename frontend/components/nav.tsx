@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import { useTheme, THEMES, THEME_META } from '@/lib/theme';
+import { useTheme, THEMES, THEME_META, type Theme } from '@/lib/theme';
 import { api, type NotificationItem as Notification } from '@/lib/api';
 
 // ── Notification bell ────────────────────────────────────────────────────────
@@ -153,6 +153,69 @@ function NotificationBell() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Theme picker dropdown ─────────────────────────────────────────────────────
+
+const DARK_THEMES:  Theme[] = ['obsidian', 'crimson', 'terminal', 'ocean', 'ember'];
+const LIGHT_THEMES: Theme[] = ['paper', 'linen', 'slate'];
+
+function ThemePickerDropdown({ current, onPick }: { current: Theme; onPick: (t: Theme) => void }) {
+  return (
+    <div className="absolute right-0 top-8 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-2.5 w-52 z-50">
+      {/* Dark group */}
+      <p className="flex items-center gap-1.5 text-[9px] font-mono text-zinc-600 uppercase tracking-widest px-1 pb-1.5">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        Dark
+      </p>
+      <div className="space-y-0.5">
+        {DARK_THEMES.map(t => <ThemeRow key={t} t={t} active={current === t} onPick={onPick} />)}
+      </div>
+
+      <div className="my-2 border-t border-zinc-800" />
+
+      {/* Light group */}
+      <p className="flex items-center gap-1.5 text-[9px] font-mono text-zinc-600 uppercase tracking-widest px-1 pb-1.5">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        Light
+      </p>
+      <div className="space-y-0.5">
+        {LIGHT_THEMES.map(t => <ThemeRow key={t} t={t} active={current === t} onPick={onPick} />)}
+      </div>
+    </div>
+  );
+}
+
+function ThemeRow({ t, active, onPick }: { t: Theme; active: boolean; onPick: (t: Theme) => void }) {
+  const meta = THEME_META[t];
+  const isLight = meta.mode === 'light';
+  return (
+    <button
+      onClick={() => onPick(t)}
+      className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${
+        active ? 'bg-zinc-800' : 'hover:bg-zinc-800/60'
+      }`}
+    >
+      <span
+        className={`w-8 h-5 rounded flex-shrink-0 overflow-hidden relative ${isLight ? 'border border-zinc-700/60' : ''}`}
+        style={{ background: meta.bg }}
+      >
+        <span className="absolute bottom-0 left-0 right-0 h-[6px]" style={{ background: meta.dot }} />
+      </span>
+      <span className={`text-xs font-mono flex-1 ${active ? 'text-zinc-100' : 'text-zinc-400'}`}>
+        {meta.label}
+      </span>
+      {active && <span className="text-[10px] text-zinc-500">✓</span>}
+    </button>
   );
 }
 
@@ -315,21 +378,7 @@ export function Nav() {
                 className="w-5 h-5 rounded-full border-2 border-zinc-700 hover:border-zinc-400 transition-colors flex-shrink-0"
                 style={{ backgroundColor: THEME_META[theme].dot }}
               />
-              {showPicker && (
-                <div className="absolute right-0 top-8 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-3 w-44 z-50">
-                  <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2 px-1">Theme</p>
-                  <div className="space-y-0.5">
-                    {THEMES.map(t => (
-                      <button key={t} onClick={() => pickTheme(t)}
-                        className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${theme === t ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'}`}>
-                        <span className="w-3 h-3 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: THEME_META[t].dot }} />
-                        <span className="text-xs font-mono">{THEME_META[t].label}</span>
-                        {theme === t && <span className="ml-auto text-[10px] text-zinc-500">✓</span>}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {showPicker && <ThemePickerDropdown current={theme} onPick={pickTheme} />}
             </div>
           </div>
 
@@ -344,21 +393,7 @@ export function Nav() {
                 className="w-5 h-5 rounded-full border-2 border-zinc-700 hover:border-zinc-400 transition-colors"
                 style={{ backgroundColor: THEME_META[theme].dot }}
               />
-              {showPicker && (
-                <div className="absolute right-0 top-8 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-3 w-44 z-50">
-                  <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2 px-1">Theme</p>
-                  <div className="space-y-0.5">
-                    {THEMES.map(t => (
-                      <button key={t} onClick={() => pickTheme(t)}
-                        className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors ${theme === t ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'}`}>
-                        <span className="w-3 h-3 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: THEME_META[t].dot }} />
-                        <span className="text-xs font-mono">{THEME_META[t].label}</span>
-                        {theme === t && <span className="ml-auto text-[10px] text-zinc-500">✓</span>}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {showPicker && <ThemePickerDropdown current={theme} onPick={pickTheme} />}
             </div>
             {/* Hamburger */}
             <button

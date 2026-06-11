@@ -187,3 +187,51 @@ body {
   --color-pink-900: #f8ddd0;
   --color-pink-500: #9333ea;
 }
+
+/* ── 7. Linen — warm white + indigo ────────────────────────────── */
+[data-theme="linen"] {
+  color-scheme: light;
+
+  --color-zinc-950: #fafaf8;
+  --color-zinc-900: #f0f0ec;
+  --color-zinc-800: #e4e4de;
+  --color-zinc-700: #d0d0c8;
+  --color-zinc-600: #a0a098;
+  --color-zinc-500: #707068;
+  --color-zinc-400: #505048;
+  --color-zinc-300: #363630;
+  --color-zinc-200: #202018;
+  --color-zinc-100: #101008;
+
+  --color-amber-400: #4f46e5;
+  --color-amber-300: #6366f1;
+  --color-amber-900: #eef2ff;
+
+  --color-pink-950: #f5f3ff;
+  --color-pink-900: #ede9fe;
+  --color-pink-500: #8b5cf6;
+}
+
+/* ── 8. Slate — cool white + sky blue ─────────────────────────── */
+[data-theme="slate"] {
+  color-scheme: light;
+
+  --color-zinc-950: #f8fafc;
+  --color-zinc-900: #f1f5f9;
+  --color-zinc-800: #e2e8f0;
+  --color-zinc-700: #cbd5e1;
+  --color-zinc-600: #94a3b8;
+  --color-zinc-500: #64748b;
+  --color-zinc-400: #475569;
+  --color-zinc-300: #334155;
+  --color-zinc-200: #1e293b;
+  --color-zinc-100: #0f172a;
+
+  --color-amber-400: #0284c7;
+  --color-amber-300: #0ea5e9;
+  --color-amber-900: #e0f2fe;
+
+  --color-pink-950: #f0f9ff;
+  --color-pink-900: #e0f2fe;
+  --color-pink-500: #6366f1;
+}
