@@ -150,12 +150,12 @@ export default function HomePage() {
   const activeFilterCount = [selectedType, selectedDecade, selectedMake].filter(Boolean).length;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-4 sm:py-8">
 
       {/* ── Hero title (always shown when not filtered) ── */}
       {!isFiltered && (
         <div className="text-center mb-5">
-          <h1 className="text-5xl font-bold font-mono text-amber-400 mb-2 tracking-tight">CurioCalc</h1>
+          <h1 className="text-3xl sm:text-5xl font-bold font-mono text-amber-400 mb-2 tracking-tight">CurioCalc</h1>
           <p className="text-zinc-500 font-mono text-sm">The open-source calculator collection community</p>
         </div>
       )}
