@@ -237,7 +237,11 @@ export default function NewCalculatorPage() {
         void updated;
       }
 
-      router.push(`/calculators/${calc.id}`);
+      if (calc.status === 'pending') {
+        router.push(`/calculators/${calc.id}?submitted=1`);
+      } else {
+        router.push(`/calculators/${calc.id}`);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add calculator');
     } finally {
@@ -251,14 +255,6 @@ export default function NewCalculatorPage() {
       <div className="text-4xl mb-4">🔒</div>
       <p className="text-zinc-400 font-mono text-sm mb-4">You need to be logged in to add a calculator.</p>
       <Link href="/login" className="text-amber-400 hover:text-amber-300 font-mono text-sm">Sign in →</Link>
-    </div>
-  );
-
-  if (!user.is_superuser && !user.is_curator) return (
-    <div className="max-w-lg mx-auto px-4 py-20 text-center">
-      <div className="text-4xl mb-4">🔒</div>
-      <p className="text-zinc-400 font-mono text-sm mb-4">Only admins and curators can add calculators.</p>
-      <Link href="/" className="text-amber-400 hover:text-amber-300 font-mono text-sm">← Browse</Link>
     </div>
   );
 
@@ -550,11 +546,20 @@ export default function NewCalculatorPage() {
           )}
         </section>
 
+        {!user.is_superuser && !user.is_curator && (
+          <p className="text-[11px] font-mono text-zinc-600 text-center -mb-2">
+            Your submission will be reviewed before appearing in the public database.
+          </p>
+        )}
         <button
           type="submit" disabled={loading}
           className="w-full bg-amber-400 text-zinc-950 rounded-xl py-3 font-mono font-bold text-sm hover:bg-amber-300 transition-colors disabled:opacity-50"
         >
-          {loading ? loadingStatus || 'Adding…' : '+ Add to database'}
+          {loading
+            ? loadingStatus || 'Submitting…'
+            : user.is_superuser || user.is_curator
+              ? '+ Add to database'
+              : '+ Submit for review'}
         </button>
       </form>
     </div>

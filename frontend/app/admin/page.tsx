@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge' | 'import'>('stats');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge' | 'import' | 'submissions'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
-        {(['stats', 'calcs', 'users', 'suggestions', 'photos', 'merge', 'import'] as const).map(t => (
+        {(['stats', 'calcs', 'users', 'submissions', 'suggestions', 'photos', 'merge', 'import'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -51,6 +51,7 @@ export default function AdminPage() {
        : tab === 'merge'      ? <MergeTab />
        : tab === 'photos'     ? <PhotosTab />
        : tab === 'import'     ? <ImportTab />
+       : tab === 'submissions' ? <SubmissionsTab />
        : <SuggestionsTab />}
     </div>
   );
@@ -1168,6 +1169,103 @@ function ImportTab() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────── Submissions tab ── */
+function SubmissionsTab() {
+  const [calcs, setCalcs] = useState<Calculator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.admin.pendingSubmissions()
+      .then(setCalcs)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const approve = async (id: string) => {
+    setActing(id);
+    try {
+      await api.admin.approveSubmission(id);
+      setCalcs(prev => prev.filter(c => c.id !== id));
+    } catch { /* ignore */ }
+    finally { setActing(null); }
+  };
+
+  const reject = async (id: string) => {
+    setActing(id);
+    try {
+      await api.admin.rejectSubmission(id);
+      setCalcs(prev => prev.filter(c => c.id !== id));
+    } catch { /* ignore */ }
+    finally { setActing(null); }
+  };
+
+  if (loading) return <div className="text-zinc-600 font-mono text-sm animate-pulse py-8">Loading…</div>;
+
+  if (calcs.length === 0) return (
+    <div className="text-center py-16">
+      <p className="text-zinc-600 font-mono text-sm">No pending submissions</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3 max-w-3xl">
+      <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-4">{calcs.length} pending</p>
+      {calcs.map(calc => (
+        <div key={calc.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-start gap-4">
+          <div className="w-14 h-14 flex-shrink-0 rounded-lg bg-zinc-800 overflow-hidden flex items-center justify-center">
+            {calc.images[0]
+              ? <img src={calc.images[0]} alt="" className="w-full h-full object-contain" />
+              : <span className="text-2xl opacity-20">🧮</span>}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="font-mono font-bold text-zinc-100 text-sm">{calc.make} {calc.model}</p>
+              {calc.is_verified && (
+                <span className="text-[9px] font-mono bg-amber-900/30 text-amber-400 border border-amber-900/40 px-1.5 py-0.5 rounded">verified</span>
+              )}
+            </div>
+            <p className="text-[11px] font-mono text-zinc-500">
+              {calc.calc_type}{calc.year_introduced ? ` · ${calc.year_introduced}` : ''}{calc.country_of_origin ? ` · ${calc.country_of_origin}` : ''}
+            </p>
+            {calc.description && (
+              <p className="text-[11px] font-mono text-zinc-600 mt-1 line-clamp-2">{calc.description}</p>
+            )}
+            {calc.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {calc.tags.map(t => (
+                  <span key={t} className="text-[9px] font-mono bg-zinc-800 text-zinc-500 border border-zinc-700 px-1.5 py-0.5 rounded">#{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 flex-shrink-0">
+            <Link href={`/calculators/${calc.id}`} target="_blank"
+              className="text-[10px] font-mono text-zinc-500 hover:text-amber-400 transition-colors text-right">preview ↗</Link>
+            <button
+              onClick={() => approve(calc.id)}
+              disabled={acting === calc.id}
+              className="px-3 py-1.5 bg-green-900/40 text-green-400 border border-green-900/50 rounded-lg font-mono text-xs font-bold hover:bg-green-900/60 transition-colors disabled:opacity-50"
+            >
+              {acting === calc.id ? '…' : '✓ approve'}
+            </button>
+            <button
+              onClick={() => reject(calc.id)}
+              disabled={acting === calc.id}
+              className="px-3 py-1.5 bg-red-950/30 text-red-400 border border-red-900/30 rounded-lg font-mono text-xs hover:bg-red-900/20 transition-colors disabled:opacity-50"
+            >
+              ✕ reject
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -18,6 +18,7 @@ export type Calculator = {
   weirdness_score: number | null;
   is_verified: boolean;
   is_featured: boolean;
+  status: string;
   tags: string[];
   manual_url: string | null;
   external_refs: Array<{ label: string; url: string }>;
@@ -562,6 +563,11 @@ export const api = {
       }
       return res.json();
     },
+    pendingSubmissions: () => request<Calculator[]>('/api/v1/admin/submissions'),
+    approveSubmission: (id: string) =>
+      request<Calculator>(`/api/v1/admin/calculators/${id}/approve`, { method: 'POST' }),
+    rejectSubmission: (id: string) =>
+      request<void>(`/api/v1/admin/calculators/${id}/reject`, { method: 'POST' }),
   },
 
   comments: {

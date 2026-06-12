@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, type Calculator, type CollectionEntry, type EditSuggestion, type Comment, type AuthUser, recordRecentlyViewed } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -74,6 +74,8 @@ export default function CalculatorPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justSubmitted = searchParams.get('submitted') === '1';
   const [calc, setCalc] = useState<Calculator | null>(null);
   const [related, setRelated] = useState<Calculator[]>([]);
   const [variants, setVariants] = useState<Calculator[]>([]);
@@ -191,6 +193,18 @@ export default function CalculatorPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Pending / just-submitted banner */}
+      {(justSubmitted || calc.status === 'pending') && (
+        <div className="mb-6 bg-amber-950/30 border border-amber-900/50 rounded-xl px-5 py-4">
+          <p className="text-sm font-bold font-mono text-amber-400 mb-1">
+            {justSubmitted ? '✓ Submission received!' : '⏳ Pending review'}
+          </p>
+          <p className="text-xs font-mono text-zinc-400">
+            This calculator is waiting for admin or curator approval before it appears in the public database.
+            {justSubmitted && ' You can share this link — it will go live once approved.'}
+          </p>
+        </div>
+      )}
       <Link href="/" className="text-xs text-zinc-500 font-mono hover:text-zinc-300 transition-colors mb-6 inline-block">
         ← back to catalog
       </Link>

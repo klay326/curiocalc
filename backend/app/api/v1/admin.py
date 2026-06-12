@@ -4,7 +4,7 @@ import io
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -471,3 +471,54 @@ async def import_calculators_csv(
         await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
 
     return {"created": len(created), "skipped": len(skipped), "errors": errors}
+
+
+# ── Submission approval ────────────────────────────────────────────────────────
+
+@router.get("/submissions", response_model=list[CalculatorPublic])
+async def list_pending_submissions(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    result = await db.execute(
+        select(Calculator).where(Calculator.status == "pending").order_by(Calculator.created_at)
+    )
+    calcs = result.scalars().all()
+    out = []
+    for calc in calcs:
+        pub = CalculatorPublic.model_validate(calc)
+        out.append(pub)
+    return out
+
+
+@router.post("/calculators/{calc_id}/approve", response_model=CalculatorPublic)
+async def approve_submission(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    result = await db.execute(select(Calculator).where(Calculator.id == calc_id))
+    calc = result.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculator not found")
+    calc.status = "approved"
+    await db.commit()
+    await db.refresh(calc)
+    await cache_incr("calcs:v")
+    await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
+    return CalculatorPublic.model_validate(calc)
+
+
+@router.post("/calculators/{calc_id}/reject", status_code=204)
+async def reject_submission(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    result = await db.execute(select(Calculator).where(Calculator.id == calc_id))
+    calc = result.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculator not found")
+    calc.status = "rejected"
+    await db.commit()
+    return Response(status_code=204)

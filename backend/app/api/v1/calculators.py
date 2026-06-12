@@ -83,7 +83,7 @@ async def list_calculators(
         if hit is not None:
             return [CalculatorPublic.model_validate(d) for d in hit]
 
-    stmt = select(Calculator)
+    stmt = select(Calculator).where(Calculator.status == "approved")
 
     # By default, only show canonical models (no parent) — keeps browse clean
     if not include_variants:
@@ -542,15 +542,18 @@ async def get_also_owned(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 async def create_calculator(
     payload: CalculatorCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_staff),
+    current_user: User = Depends(get_current_user),
 ):
-    calc = Calculator(**payload.model_dump(), added_by_user_id=current_user.id)
+    is_staff = current_user.is_superuser or current_user.is_curator
+    calc_status = "approved" if is_staff else "pending"
+    calc = Calculator(**payload.model_dump(), added_by_user_id=current_user.id, status=calc_status)
     db.add(calc)
     await db.commit()
     await db.refresh(calc)
-    await notify_calc_added(calc.make, calc.model, str(calc.id), current_user.username)
-    await _bust_list_cache()
-    await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
+    if is_staff:
+        await notify_calc_added(calc.make, calc.model, str(calc.id), current_user.username)
+        await _bust_list_cache()
+        await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
     return await _with_counts(db, calc)
 
 

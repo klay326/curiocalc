@@ -64,6 +64,7 @@ class Calculator(Base):
     # Moderation
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="approved", index=True)
     added_by_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

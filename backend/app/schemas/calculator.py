@@ -76,6 +76,7 @@ class CalculatorPublic(CalculatorBase):
     weirdness_score: float | None
     is_verified: bool
     is_featured: bool = False
+    status: str = "approved"
     created_at: datetime
     updated_at: datetime
     # computed fields
