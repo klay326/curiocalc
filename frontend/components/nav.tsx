@@ -6,6 +6,36 @@ import { useAuth } from '@/lib/auth';
 import { useTheme, THEMES, THEME_META, type Theme } from '@/lib/theme';
 import { api, type NotificationItem as Notification } from '@/lib/api';
 
+// ── Message badge ─────────────────────────────────────────────────────────────
+
+function MessagesBadge() {
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = () =>
+      api.messages.unreadCount()
+        .then(r => { if (!cancelled) setUnread(r.count); })
+        .catch(() => {});
+    fetch();
+    const id = setInterval(fetch, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  return (
+    <Link href="/messages" className="relative text-zinc-500 hover:text-zinc-200 transition-colors p-1" aria-label="Messages">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      {unread > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 bg-green-400 text-zinc-950 text-[9px] font-bold font-mono rounded-full flex items-center justify-center leading-none">
+          {unread > 9 ? '9+' : unread}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 // ── Notification bell ────────────────────────────────────────────────────────
 
 function NotificationBell() {
@@ -301,6 +331,7 @@ export function Nav() {
 
             {user ? (
               <>
+                <MessagesBadge />
                 <NotificationBell />
                 {/* User dropdown */}
                 <div className="relative" ref={userMenuRef}>
@@ -384,7 +415,8 @@ export function Nav() {
 
           {/* Mobile right side */}
           <div className="flex md:hidden items-center gap-3">
-            {user && <NotificationBell />}
+            {user && <MessagesBadge />}
+          {user && <NotificationBell />}
             {/* Theme dot */}
             <div className="relative" ref={pickerRef} data-theme-picker>
               <button
@@ -429,6 +461,7 @@ export function Nav() {
                 <div className="border-t border-zinc-800 mt-1 pt-1">
                   <Link href="/feed" className={mobileLinkCls('/feed')}>Feed</Link>
                   <Link href="/collection" className={mobileLinkCls('/collection')}>Collection</Link>
+                  <Link href="/messages" className={mobileLinkCls('/messages')}>Messages</Link>
                   <Link href={`/u/${user.username}`} className={mobileLinkCls(`/u/${user.username}`)}>
                     @{user.username}
                   </Link>
