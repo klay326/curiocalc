@@ -330,7 +330,6 @@ export default function TradePage() {
           )}
         </>
       ) : tab === 'matches' ? (
-        /* Trade matches tab */
         matchesLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => <div key={i} className="h-24 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />)}
