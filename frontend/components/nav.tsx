@@ -265,7 +265,7 @@ function BottomTabBar() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-sm border-t border-zinc-800"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950 border-t border-zinc-800"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="flex h-14">
@@ -366,6 +366,17 @@ export function Nav() {
     { href: '/timeline', label: 'Timeline' },
     { href: '/top', label: 'Top collectors' },
     { href: '/compare', label: 'Compare' },
+    { href: '/collector-compare', label: 'Compare collectors' },
+    { href: '/contribute', label: 'Contribute' },
+  ];
+
+  // Mobile drawer only shows secondary/utility links — primary nav is in bottom tab bar
+  const mobileDiscoverLinks = [
+    { href: '/brands', label: 'Brands' },
+    { href: '/trending', label: 'Trending' },
+    { href: '/timeline', label: 'Timeline' },
+    { href: '/top', label: 'Top collectors' },
+    { href: '/compare', label: 'Compare calcs' },
     { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },
   ];
@@ -472,8 +483,7 @@ export function Nav() {
 
           {/* Mobile right side */}
           <div className="flex md:hidden items-center gap-3">
-            {user && <MessagesBadge />}
-          {user && <NotificationBell />}
+            {user && <NotificationBell />}
             {/* Theme dot */}
             <div className="relative" ref={pickerRef} data-theme-picker>
               <button
@@ -502,46 +512,39 @@ export function Nav() {
 
       <BottomTabBar />
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — secondary links only (primary nav is in bottom tab bar) */}
       {menuOpen && (
-        <div className="md:hidden fixed inset-0 top-14 z-40 bg-zinc-950/95 backdrop-blur-sm overflow-y-auto">
-          <div className="pb-8">
-            {primaryLinks.map(({ href, label }) => (
+        <div className="md:hidden fixed inset-0 top-14 z-40 bg-zinc-950 overflow-y-auto"
+          style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom))' }}>
+          <div className="pt-1 pb-6">
+            <p className="px-4 pt-3 pb-1 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">Discover</p>
+            {mobileDiscoverLinks.map(({ href, label }) => (
               <Link key={href} href={href} className={mobileLinkCls(href)}>{label}</Link>
             ))}
-            <div className="border-t border-zinc-800 mt-1 pt-1">
-              {moreLinks.map(({ href, label }) => (
-                <Link key={href} href={href} className={mobileLinkCls(href)}>{label}</Link>
-              ))}
-            </div>
 
             {user ? (
               <>
-                <div className="border-t border-zinc-800 mt-1 pt-1">
-                  <Link href="/feed" className={mobileLinkCls('/feed')}>Feed</Link>
-                  <Link href="/collection" className={mobileLinkCls('/collection')}>Collection</Link>
-                  <Link href="/messages" className={mobileLinkCls('/messages')}>Messages</Link>
-                  <Link href={`/u/${user.username}`} className={mobileLinkCls(`/u/${user.username}`)}>
-                    @{user.username}
-                  </Link>
-                  <Link href="/settings" className={mobileLinkCls('/settings')}>Settings</Link>
-                  {(user.is_superuser || user.is_curator) && <Link href="/calculators/new" className={mobileLinkCls('/calculators/new')}>+ Add calculator</Link>}
-                  {user.is_superuser && <Link href="/admin" className={mobileLinkCls('/admin')}>Admin</Link>}
-                </div>
+                <p className="px-4 pt-4 pb-1 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">Account</p>
+                <Link href="/feed" className={mobileLinkCls('/feed')}>Feed</Link>
+                <Link href="/messages" className={mobileLinkCls('/messages')}>Messages</Link>
+                <Link href="/settings" className={mobileLinkCls('/settings')}>Settings</Link>
+                {(user.is_superuser || user.is_curator) && <Link href="/calculators/new" className={mobileLinkCls('/calculators/new')}>+ Add calculator</Link>}
+                {user.is_superuser && <Link href="/admin" className={mobileLinkCls('/admin')}>Admin</Link>}
                 <div className="px-4 pt-4">
                   <button onClick={() => { logout(); setMenuOpen(false); }}
-                    className="w-full text-left font-mono text-sm text-zinc-500 hover:text-zinc-300 transition-colors py-2">
+                    className="w-full text-left font-mono text-sm text-zinc-500 hover:text-red-400 transition-colors py-2">
                     Sign out
                   </button>
                 </div>
               </>
             ) : (
-              <div className="border-t border-zinc-800 mt-1 pt-1">
+              <>
+                <p className="px-4 pt-4 pb-1 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">Account</p>
                 <Link href="/login" className={mobileLinkCls('/login')}>Sign in</Link>
                 <Link href="/register" className="block px-4 py-3 font-mono text-sm text-amber-400 font-bold border-b border-zinc-800/60">
                   Join CurioCalc
                 </Link>
-              </div>
+              </>
             )}
           </div>
         </div>
