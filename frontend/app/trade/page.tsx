@@ -266,8 +266,7 @@ export default function TradePage() {
             ))}
           </div>
         )
-      ) : (
-        /* Wanted tab */
+      ) : tab === 'wanted' ? (
         <>
           {demand.length > 0 && !query && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6">
