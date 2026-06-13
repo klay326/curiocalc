@@ -249,6 +249,62 @@ function ThemeRow({ t, active, onPick }: { t: Theme; active: boolean; onPick: (t
   );
 }
 
+// ── Bottom tab bar (mobile only) ─────────────────────────────────────────────
+
+function BottomTabBar() {
+  const pathname = usePathname();
+  const { user } = useAuth();
+
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
+
+  const cls = (href: string) =>
+    `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors py-2 ${
+      isActive(href) ? 'text-amber-400' : 'text-zinc-500 active:text-zinc-300'
+    }`;
+
+  return (
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-sm border-t border-zinc-800"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="flex h-14">
+        <Link href="/" className={cls('/')}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span className="text-[10px] font-mono">Browse</span>
+        </Link>
+        <Link href="/trade" className={cls('/trade')}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+          <span className="text-[10px] font-mono">Trade</span>
+        </Link>
+        <Link href="/collection" className={cls('/collection')}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
+          <span className="text-[10px] font-mono">Collection</span>
+        </Link>
+        <Link href={user ? `/u/${user.username}` : '/login'} className={cls(user ? `/u/${user.username}` : '/login')}>
+          {user?.avatar_url ? (
+            <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover border border-zinc-700" />
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+          )}
+          <span className="text-[10px] font-mono">{user ? (user.display_name ?? user.username).split(' ')[0].slice(0, 8) : 'Sign in'}</span>
+        </Link>
+      </div>
+    </nav>
+  );
+}
+
 // ── Main nav ─────────────────────────────────────────────────────────────────
 
 export function Nav() {
@@ -310,6 +366,7 @@ export function Nav() {
     { href: '/timeline', label: 'Timeline' },
     { href: '/top', label: 'Top collectors' },
     { href: '/compare', label: 'Compare' },
+    { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },
   ];
 
@@ -442,6 +499,8 @@ export function Nav() {
           </div>
         </div>
       </nav>
+
+      <BottomTabBar />
 
       {/* Mobile drawer */}
       {menuOpen && (

@@ -46,6 +46,7 @@ export type AuthUser = {
   api_key: string | null;
   theme: string;
   collection_photos: string[];
+  showcase_ids: string[];
 };
 
 export type AdminUser = {
@@ -74,6 +75,16 @@ export type UserProfile = {
   following_count: number;
   is_following: boolean;
   collection_photos: string[];
+  showcase_ids: string[];
+};
+
+export type TradeMatch = {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  they_have: { id: string; make: string; model: string; images: string[] }[];
+  they_want: { id: string; make: string; model: string; images: string[] }[];
 };
 
 // ── Recently-viewed helpers (localStorage) ────────────────────────────────────
@@ -350,6 +361,9 @@ export const api = {
       make?: string;
       tag?: string;
       decade?: number;
+      min_rarity?: number;
+      max_rarity?: number;
+      display_type?: string;
       sort?: string;
       order?: string;
       include_variants?: boolean;
@@ -362,6 +376,9 @@ export const api = {
       if (params?.make) query.set('make', params.make);
       if (params?.tag) query.set('tag', params.tag);
       if (params?.decade != null) query.set('decade', String(params.decade));
+      if (params?.min_rarity != null) query.set('min_rarity', String(params.min_rarity));
+      if (params?.max_rarity != null) query.set('max_rarity', String(params.max_rarity));
+      if (params?.display_type) query.set('display_type', params.display_type);
       if (params?.sort) query.set('sort', params.sort);
       if (params?.order) query.set('order', params.order);
       if (params?.include_variants) query.set('include_variants', 'true');
@@ -467,6 +484,7 @@ export const api = {
       website?: string | null;
       avatar_url?: string | null;
       theme?: string | null;
+      showcase_ids?: string[];
     }) => request<AuthUser>('/api/v1/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
     leaderboard: () => request<LeaderboardEntry[]>('/api/v1/users/leaderboard'),
     follow: (username: string) =>
@@ -583,6 +601,11 @@ export const api = {
   trade: {
     listings: () => request<ForSaleListing[]>('/api/v1/collections/for-sale'),
     wanted: () => request<WantedListing[]>('/api/v1/collections/wanted'),
+    matches: () => request<TradeMatch[]>('/api/v1/collections/trade-matches'),
+  },
+
+  digest: {
+    sendMe: () => request<{ sent: boolean; reason?: string }>('/api/v1/digest/send-me', { method: 'POST' }),
   },
 
   messages: {

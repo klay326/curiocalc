@@ -25,6 +25,7 @@ class UserUpdate(BaseModel):
     website: str | None = None
     avatar_url: str | None = None
     theme: str | None = None
+    showcase_ids: list[str] | None = None
 
 
 class UserPublic(BaseModel):
@@ -47,6 +48,7 @@ class UserMe(UserPublic):
     is_curator: bool = False
     theme: str = 'obsidian'
     collection_photos: list[str] = []
+    showcase_ids: list[str] = []
 
 
 class UserAdminUpdate(BaseModel):
@@ -70,3 +72,4 @@ class UserProfile(UserPublic):
     following_count: int = 0
     is_following: bool = False
     collection_photos: list[str] = []
+    showcase_ids: list[str] = []

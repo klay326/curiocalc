@@ -36,6 +36,8 @@ export default function HomePage() {
   const [selectedType, setSelectedType]   = useState<string | null>(null);
   const [selectedDecade, setSelectedDecade] = useState<number | null>(null);
   const [selectedMake, setSelectedMake]   = useState<string | null>(null);
+  const [minRarity, setMinRarity]     = useState<number | null>(null);
+  const [selectedDisplay, setSelectedDisplay] = useState<string | null>(null);
   const [sort, setSort]               = useState('make');
 
   const [makes, setMakes]     = useState<string[]>([]);
@@ -94,11 +96,13 @@ export default function HomePage() {
     calc_type: selectedType || undefined,
     make: selectedMake || undefined,
     decade: selectedDecade ?? undefined,
+    min_rarity: minRarity ?? undefined,
+    display_type: selectedDisplay || undefined,
     sort: sortKey,
     order: sortOrder,
     skip: sk,
     limit: PAGE_SIZE,
-  }), [query, selectedType, selectedMake, selectedDecade, sortKey, sortOrder]);
+  }), [query, selectedType, selectedMake, selectedDecade, minRarity, selectedDisplay, sortKey, sortOrder]);
 
   const load = useCallback(async (reset: boolean) => {
     const sk = reset ? 0 : skip;
@@ -115,7 +119,7 @@ export default function HomePage() {
   useEffect(() => {
     setSkip(0); setCalculators([]); setHasMore(true); load(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selectedType, selectedMake, selectedDecade, sort]);
+  }, [query, selectedType, selectedMake, selectedDecade, minRarity, selectedDisplay, sort]);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(inputVal), 300);
@@ -147,7 +151,7 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loading, load]);
 
-  const activeFilterCount = [selectedType, selectedDecade, selectedMake].filter(Boolean).length;
+  const activeFilterCount = [selectedType, selectedDecade, selectedMake, minRarity != null ? 1 : null, selectedDisplay].filter(Boolean).length;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-4 sm:py-8">
@@ -358,9 +362,21 @@ export default function HomePage() {
               <button onClick={() => setSelectedMake(null)} className="hover:text-zinc-100 leading-none">✕</button>
             </span>
           )}
+          {minRarity != null && (
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-zinc-700/50 border border-zinc-600 text-zinc-300 flex items-center gap-1">
+              rarity ≥ {minRarity}
+              <button onClick={() => setMinRarity(null)} className="hover:text-zinc-100 leading-none">✕</button>
+            </span>
+          )}
+          {selectedDisplay && (
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-zinc-700/50 border border-zinc-600 text-zinc-300 flex items-center gap-1">
+              {selectedDisplay}
+              <button onClick={() => setSelectedDisplay(null)} className="hover:text-zinc-100 leading-none">✕</button>
+            </span>
+          )}
           {activeFilterCount > 0 && (
             <button
-              onClick={() => { setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); }}
+              onClick={() => { setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); setMinRarity(null); setSelectedDisplay(null); }}
               className="text-xs font-mono text-zinc-600 hover:text-red-400 transition-colors ml-auto"
             >
               clear all
@@ -396,6 +412,35 @@ export default function HomePage() {
                     className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
                       selectedDecade === d ? 'bg-zinc-700 text-zinc-100 border-zinc-500 font-bold' : 'text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
                     }`}>{d}s</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Rarity */}
+            <div>
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">
+                Min. rarity score{minRarity != null ? ` — ${minRarity}+` : ' — any'}
+              </p>
+              <input
+                type="range" min={1} max={10} step={1}
+                value={minRarity ?? 1}
+                onChange={e => setMinRarity(Number(e.target.value) === 1 ? null : Number(e.target.value))}
+                className="w-full accent-amber-400 cursor-pointer"
+              />
+              <div className="flex justify-between text-[9px] font-mono text-zinc-700 mt-0.5">
+                <span>1 — common</span><span>10 — unobtainium</span>
+              </div>
+            </div>
+
+            {/* Display type */}
+            <div>
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">Display</p>
+              <div className="flex flex-wrap gap-1.5">
+                {['LED', 'LCD', 'VFD', 'Nixie', 'Fluorescent', 'Panaplex'].map(d => (
+                  <button key={d} onClick={() => setSelectedDisplay(d === selectedDisplay ? null : d)}
+                    className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                      selectedDisplay === d ? 'bg-zinc-700 text-zinc-100 border-zinc-500 font-bold' : 'text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
+                    }`}>{d}</button>
                 ))}
               </div>
             </div>

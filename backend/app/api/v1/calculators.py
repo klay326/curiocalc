@@ -67,6 +67,9 @@ async def list_calculators(
     make: str | None = None,
     tag: str | None = None,
     decade: int | None = Query(None, description="Filter by decade, e.g. 1970"),
+    min_rarity: int | None = Query(None, description="Minimum rarity score (1-10)"),
+    max_rarity: int | None = Query(None, description="Maximum rarity score (1-10)"),
+    display_type: str | None = Query(None, description="Filter by display technology, e.g. LED"),
     sort: str = Query("make", description="make | year_introduced | rarity_score | weirdness_score | created_at"),
     order: str = Query("asc", description="asc | desc"),
     include_variants: bool = Query(False, description="Include variant/colorway entries (default: hide them)"),
@@ -77,7 +80,7 @@ async def list_calculators(
     cache_key: str | None = None
     if not q:
         version = await cache_get_int("calcs:v")
-        params_sig = f"{version}|{calc_type}|{make}|{tag}|{decade}|{sort}|{order}|{include_variants}|{skip}|{limit}"
+        params_sig = f"{version}|{calc_type}|{make}|{tag}|{decade}|{min_rarity}|{max_rarity}|{display_type}|{sort}|{order}|{include_variants}|{skip}|{limit}"
         cache_key = "calcs:list:" + hashlib.md5(params_sig.encode()).hexdigest()
         hit = await cache_get(cache_key)
         if hit is not None:
@@ -109,6 +112,12 @@ async def list_calculators(
         )
     if tag:
         stmt = stmt.where(Calculator.tags.contains([tag]))
+    if min_rarity is not None:
+        stmt = stmt.where(Calculator.rarity_score >= min_rarity)
+    if max_rarity is not None:
+        stmt = stmt.where(Calculator.rarity_score <= max_rarity)
+    if display_type:
+        stmt = stmt.where(Calculator.display_type.ilike(f"%{display_type}%"))
 
     sort_col = {
         "make": Calculator.make,

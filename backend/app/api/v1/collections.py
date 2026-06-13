@@ -232,3 +232,84 @@ async def get_for_sale_listings(db: AsyncSession = Depends(get_db)):
             "listed_at": entry.created_at.isoformat(),
         })
     return out
+
+
+@router.get("/trade-matches")
+async def get_trade_matches(
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    """Users who own something I want AND want something I own or have for sale."""
+    my_wanted_r = await db.execute(
+        select(CollectionEntry.calculator_id)
+        .where(CollectionEntry.user_id == me.id, CollectionEntry.status == "wanted")
+    )
+    my_wanted_ids = [r[0] for r in my_wanted_r.all()]
+
+    my_have_r = await db.execute(
+        select(CollectionEntry.calculator_id)
+        .where(CollectionEntry.user_id == me.id, CollectionEntry.status.in_(["owned", "for_sale"]))
+    )
+    my_have_ids = [r[0] for r in my_have_r.all()]
+
+    if not my_wanted_ids or not my_have_ids:
+        return []
+
+    givers_r = await db.execute(
+        select(CollectionEntry.user_id, CollectionEntry.calculator_id)
+        .where(
+            CollectionEntry.calculator_id.in_(my_wanted_ids),
+            CollectionEntry.status.in_(["owned", "for_sale"]),
+            CollectionEntry.user_id != me.id,
+        )
+    )
+    takers_r = await db.execute(
+        select(CollectionEntry.user_id, CollectionEntry.calculator_id)
+        .where(
+            CollectionEntry.calculator_id.in_(my_have_ids),
+            CollectionEntry.status == "wanted",
+            CollectionEntry.user_id != me.id,
+        )
+    )
+
+    from collections import defaultdict
+    giver_map: dict = defaultdict(list)
+    for uid, cid in givers_r.all():
+        giver_map[uid].append(cid)
+    taker_map: dict = defaultdict(list)
+    for uid, cid in takers_r.all():
+        taker_map[uid].append(cid)
+
+    mutual_ids = set(giver_map.keys()) & set(taker_map.keys())
+    if not mutual_ids:
+        return []
+
+    users_r = await db.execute(select(User).where(User.id.in_(mutual_ids)))
+    users_map = {u.id: u for u in users_r.scalars().all()}
+
+    all_calc_ids = list({c for cids in list(giver_map.values()) + list(taker_map.values()) for c in cids})
+    calcs_r = await db.execute(select(Calculator).where(Calculator.id.in_(all_calc_ids)))
+    calcs_map = {c.id: c for c in calcs_r.scalars().all()}
+
+    result = []
+    for uid in mutual_ids:
+        u = users_map.get(uid)
+        if not u:
+            continue
+
+        def calc_info(cid, _map=calcs_map):
+            c = _map.get(cid)
+            return {"id": str(cid), "make": c.make, "model": c.model, "images": c.images or []} if c else None
+
+        they_have = [x for x in (calc_info(c) for c in giver_map[uid]) if x]
+        they_want = [x for x in (calc_info(c) for c in taker_map[uid]) if x]
+        result.append({
+            "user_id": str(uid),
+            "username": u.username,
+            "display_name": u.display_name,
+            "avatar_url": u.avatar_url,
+            "they_have": they_have,
+            "they_want": they_want,
+        })
+
+    return sorted(result, key=lambda x: len(x["they_have"]) + len(x["they_want"]), reverse=True)

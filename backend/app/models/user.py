@@ -25,6 +25,7 @@ class User(Base):
 
     theme: Mapped[str] = mapped_column(String(20), default='obsidian')
     collection_photos: Mapped[list] = mapped_column(JSON, default=list, server_default='[]')
+    showcase_ids: Mapped[list] = mapped_column(JSON, default=list, server_default='[]')
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)

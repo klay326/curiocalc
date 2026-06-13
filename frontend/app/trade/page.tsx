@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api, type ForSaleListing, type WantedListing } from '@/lib/api';
+import { api, type ForSaleListing, type WantedListing, type TradeMatch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CONDITION_COLORS: Record<string, string> = {
@@ -96,9 +96,12 @@ function MessageModal({ toUsername, calcId, calcName, onClose }: {
 }
 
 export default function TradePage() {
-  const [tab, setTab] = useState<'for_sale' | 'wanted'>('for_sale');
+  const { user } = useAuth();
+  const [tab, setTab] = useState<'for_sale' | 'wanted' | 'matches'>('for_sale');
   const [listings, setListings] = useState<ForSaleListing[]>([]);
   const [wanted, setWanted] = useState<WantedListing[]>([]);
+  const [matches, setMatches] = useState<TradeMatch[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [messageTarget, setMessageTarget] = useState<{ username: string; calcId: string; calcName: string } | null>(null);
@@ -109,6 +112,15 @@ export default function TradePage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (tab !== 'matches' || !user || matches.length > 0) return;
+    setMatchesLoading(true);
+    api.trade.matches()
+      .then(setMatches)
+      .catch(() => {})
+      .finally(() => setMatchesLoading(false));
+  }, [tab, user, matches.length]);
 
   const filteredListings = listings.filter(l => {
     if (!query) return true;
@@ -167,6 +179,14 @@ export default function TradePage() {
           }`}>
           ⭐ Wanted ({wanted.length})
         </button>
+        {user && (
+          <button onClick={() => setTab('matches')}
+            className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors ${
+              tab === 'matches' ? 'bg-blue-900/40 text-blue-300 font-bold' : 'text-zinc-500 hover:text-zinc-300'
+            }`}>
+            🔀 Matches
+          </button>
+        )}
       </div>
 
       <input
@@ -309,7 +329,81 @@ export default function TradePage() {
             </div>
           )}
         </>
-      )}
+      ) : tab === 'matches' ? (
+        /* Trade matches tab */
+        matchesLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => <div key={i} className="h-24 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />)}
+          </div>
+        ) : matches.length === 0 ? (
+          <div className="text-center py-20 text-zinc-600 font-mono">
+            <div className="text-4xl mb-3">🔀</div>
+            <p className="text-sm font-bold mb-1">No trade matches yet</p>
+            <p className="text-xs text-zinc-700 max-w-xs mx-auto">Matches appear when someone owns a calc on your wishlist AND wants something you own.</p>
+            <div className="flex gap-3 justify-center mt-4">
+              <Link href="/collection" className="text-xs font-mono text-amber-400 hover:text-amber-300 border border-amber-900/40 px-3 py-1.5 rounded-lg transition-colors">
+                Add to collection →
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-4">
+              {matches.length} potential trade partner{matches.length !== 1 ? 's' : ''}
+            </p>
+            {matches.map(m => (
+              <div key={m.user_id} className="bg-zinc-900 border border-blue-900/30 hover:border-blue-800/50 rounded-xl p-4 transition-colors">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-full bg-amber-900/40 border border-amber-900/40 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {m.avatar_url
+                      ? <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
+                      : <span className="text-sm font-bold text-amber-400 font-mono">{(m.display_name ?? m.username).charAt(0).toUpperCase()}</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/u/${m.username}`} className="font-bold font-mono text-zinc-100 hover:text-amber-400 transition-colors text-sm">
+                      {m.display_name ?? m.username}
+                    </Link>
+                    <p className="text-[10px] font-mono text-zinc-600">@{m.username}</p>
+                  </div>
+                  <button
+                    onClick={() => setMessageTarget({ username: m.username, calcId: m.they_have[0]?.id ?? '', calcName: `${m.they_have[0]?.make} ${m.they_have[0]?.model}` })}
+                    className="text-[11px] font-mono text-blue-400 hover:text-blue-300 border border-blue-900/40 hover:border-blue-700/60 px-2.5 py-1 rounded-lg transition-colors flex-shrink-0">
+                    ✉ Message
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[9px] font-mono text-green-500 uppercase tracking-widest mb-1.5">They have (you want)</p>
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {m.they_have.slice(0, 4).map(c => (
+                        <Link key={c.id} href={`/calculators/${c.id}`} className="flex-shrink-0">
+                          <div className="w-12 h-12 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center border border-green-900/30 hover:border-green-700/50 transition-colors">
+                            {c.images[0] ? <img src={c.images[0]} alt="" className="w-full h-full object-contain" /> : <span className="text-base opacity-20">🧮</span>}
+                          </div>
+                          <p className="text-[9px] font-mono text-zinc-600 truncate w-12 text-center mt-0.5">{c.model}</p>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-1.5">They want (you have)</p>
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {m.they_want.slice(0, 4).map(c => (
+                        <Link key={c.id} href={`/calculators/${c.id}`} className="flex-shrink-0">
+                          <div className="w-12 h-12 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center border border-amber-900/30 hover:border-amber-700/50 transition-colors">
+                            {c.images[0] ? <img src={c.images[0]} alt="" className="w-full h-full object-contain" /> : <span className="text-base opacity-20">🧮</span>}
+                          </div>
+                          <p className="text-[9px] font-mono text-zinc-600 truncate w-12 text-center mt-0.5">{c.model}</p>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : null}
     </div>
   );
 }

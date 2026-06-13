@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, Calculator } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 export default function SettingsPage() {
@@ -32,8 +32,42 @@ export default function SettingsPage() {
       setWebsite(user.website ?? '');
       setAvatarUrl(user.avatar_url ?? '');
       setApiKey(user.api_key ?? null);
+      setShowcaseIds(user.showcase_ids ?? []);
+      setLoadingShowcase(true);
+      api.collection.mine().then(async (entries) => {
+        const ownedIds = [...new Set(
+          entries.filter(e => e.status === 'owned' || e.status === 'for_sale').map(e => e.calculator_id)
+        )];
+        if (ownedIds.length === 0) return;
+        const calcs = await api.calculators.batch(ownedIds).catch(() => []);
+        const map: Record<string, Calculator> = {};
+        calcs.forEach(c => { map[c.id] = c; });
+        setShowcaseCalcs(map);
+      }).finally(() => setLoadingShowcase(false));
     }
   }, [user, authLoading, router]);
+
+  const toggleShowcase = (id: string) => {
+    setShowcaseIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 6) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const handleSaveShowcase = async () => {
+    setSavingShowcase(true);
+    try {
+      await api.users.updateMe({ showcase_ids: showcaseIds });
+      await refreshUser();
+      setShowcaseSaved(true);
+      setTimeout(() => setShowcaseSaved(false), 3000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSavingShowcase(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -60,6 +94,13 @@ export default function SettingsPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
+
+  // Showcase
+  const [showcaseIds, setShowcaseIds] = useState<string[]>([]);
+  const [showcaseCalcs, setShowcaseCalcs] = useState<Record<string, Calculator>>({});
+  const [loadingShowcase, setLoadingShowcase] = useState(false);
+  const [savingShowcase, setSavingShowcase] = useState(false);
+  const [showcaseSaved, setShowcaseSaved] = useState(false);
 
   const handleSendVerification = async () => {
     setSendingVerification(true);
@@ -271,6 +312,90 @@ export default function SettingsPage() {
             {saving ? 'Saving…' : '✓ Save changes'}
           </button>
         </div>
+      </div>
+
+      {/* Showcase */}
+      <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-bold font-mono text-zinc-300">Profile showcase</h2>
+          <span className={`text-[10px] font-mono ${showcaseIds.length === 6 ? 'text-amber-400' : 'text-zinc-600'}`}>
+            {showcaseIds.length}/6 pinned
+          </span>
+        </div>
+        <p className="text-[11px] text-zinc-600 font-mono mb-4">
+          Pick up to 6 calculators to feature at the top of your profile.
+        </p>
+        {showcaseSaved && (
+          <div className="bg-green-950/40 border border-green-800/50 text-green-400 font-mono text-xs px-3 py-2 rounded-lg mb-4">
+            ✓ Showcase updated!
+          </div>
+        )}
+        {loadingShowcase ? (
+          <p className="text-[11px] text-zinc-600 font-mono">Loading collection…</p>
+        ) : Object.keys(showcaseCalcs).length === 0 ? (
+          <p className="text-[11px] text-zinc-600 font-mono">
+            Add calcs to your collection first, then come back to pin your favorites.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-4 max-h-80 overflow-y-auto scrollbar-thin pr-1">
+              {Object.values(showcaseCalcs).map(c => {
+                const pinned = showcaseIds.includes(c.id);
+                const disabled = !pinned && showcaseIds.length >= 6;
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => toggleShowcase(c.id)}
+                    disabled={disabled}
+                    className={`relative group rounded-xl overflow-hidden border transition-all text-left ${
+                      pinned
+                        ? 'border-amber-400/60 ring-1 ring-amber-400/30'
+                        : disabled
+                        ? 'border-zinc-800 opacity-40 cursor-not-allowed'
+                        : 'border-zinc-800 hover:border-zinc-600'
+                    }`}
+                  >
+                    <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
+                      {c.images[0]
+                        ? <img src={c.images[0]} alt={c.model} className="w-full h-full object-contain" />
+                        : <span className="text-xl opacity-20">🧮</span>}
+                    </div>
+                    <div className="p-1.5">
+                      <p className="text-[8px] font-mono text-zinc-600 truncate">{c.make}</p>
+                      <p className="text-[9px] font-bold font-mono text-zinc-300 truncate">{c.model}</p>
+                    </div>
+                    {pinned && (
+                      <div className="absolute top-1 right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
+                        <span className="text-[8px] font-bold text-zinc-950">
+                          {showcaseIds.indexOf(c.id) + 1}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {showcaseIds.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <span className="text-[10px] font-mono text-zinc-600">Order:</span>
+                {showcaseIds.map((id, i) => (
+                  <span key={id} className="text-[10px] font-mono text-amber-400/80 bg-amber-950/30 border border-amber-900/40 rounded px-1.5 py-0.5">
+                    {i + 1}. {showcaseCalcs[id]?.model ?? '…'}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveShowcase}
+                disabled={savingShowcase}
+                className="px-5 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50"
+              >
+                {savingShowcase ? 'Saving…' : '✓ Save showcase'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* API Key */}

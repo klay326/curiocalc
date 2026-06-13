@@ -94,8 +94,10 @@ export default function UserProfilePage() {
         setFollowing(p.is_following);
         setFollowerCount(p.follower_count);
         setEntries(e);
-        const ids = [...new Set(e.map(entry => entry.calculator_id))];
-        const calcs = await api.calculators.batch(ids).catch(() => []);
+        // Batch fetch all collection calcs + showcase calcs
+        const collectionIds = [...new Set(e.map(entry => entry.calculator_id))];
+        const allIds = [...new Set([...collectionIds, ...(p.showcase_ids ?? [])])];
+        const calcs = await api.calculators.batch(allIds).catch(() => []);
         const map: Record<string, Calculator> = {};
         calcs.forEach(c => { map[c.id] = c; });
         setCalcMap(map);
@@ -252,6 +254,32 @@ export default function UserProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Showcase */}
+      {(profile.showcase_ids?.length ?? 0) > 0 && (
+        <div className="mb-6">
+          <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Showcase</p>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            {(profile.showcase_ids ?? []).map(id => {
+              const c = calcMap[id];
+              if (!c) return null;
+              return (
+                <Link key={id} href={`/calculators/${id}`} className="group bg-zinc-900 border border-amber-900/30 hover:border-amber-400/40 rounded-xl overflow-hidden transition-colors">
+                  <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
+                    {c.images[0]
+                      ? <img src={c.images[0]} alt={c.model} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                      : <span className="text-2xl opacity-20">🧮</span>}
+                  </div>
+                  <div className="p-1.5">
+                    <p className="text-[9px] font-mono text-zinc-600 truncate">{c.make}</p>
+                    <p className="text-[10px] font-bold font-mono text-zinc-300 group-hover:text-amber-400 transition-colors truncate">{c.model}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Badges */}
       {badges.length > 0 && (
