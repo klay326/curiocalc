@@ -13,9 +13,10 @@ body {
   transition: background-color 0.2s, color 0.2s;
 }
 
-/* Bottom tab bar clearance */
+/* Mobile: fixed nav + bottom tab bar clearance */
 @media (max-width: 767px) {
   main {
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
     padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
   }
 }

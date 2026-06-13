@@ -383,7 +383,7 @@ export function Nav() {
 
   return (
     <>
-      <nav className="nav-safe-top border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
+      <nav className="nav-safe-top border-b border-zinc-800 bg-zinc-950 fixed top-0 left-0 right-0 md:sticky md:bg-zinc-950/90 md:backdrop-blur-sm z-50">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 font-mono font-bold text-amber-400 hover:text-amber-300 transition-colors flex-shrink-0">
@@ -514,8 +514,8 @@ export function Nav() {
 
       {/* Mobile drawer — secondary links only (primary nav is in bottom tab bar) */}
       {menuOpen && (
-        <div className="md:hidden fixed inset-0 top-14 z-40 bg-zinc-950 overflow-y-auto"
-          style={{ paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom))' }}>
+        <div className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-zinc-950 overflow-y-auto"
+          style={{ top: 'calc(3.5rem + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <div className="pt-1 pb-6">
             <p className="px-4 pt-3 pb-1 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">Discover</p>
             {mobileDiscoverLinks.map(({ href, label }) => (
