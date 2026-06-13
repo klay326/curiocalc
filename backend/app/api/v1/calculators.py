@@ -47,10 +47,13 @@ async def _with_counts(db: AsyncSession, calc: Calculator) -> CalculatorPublic:
     d["want_count"] = want_r.scalar() or 0
     d["variant_count"] = variant_r.scalar() or 0
 
-    # If base has no images but exactly one variant, inherit the variant's image
-    if not d["images"] and d["variant_count"] == 1:
+    # If base has no images, inherit from the first variant that has images
+    if not d["images"] and d["variant_count"] > 0:
         vi_r = await db.execute(
-            select(Calculator.images).where(Calculator.parent_id == calc.id).limit(1)
+            select(Calculator.images).where(
+                Calculator.parent_id == calc.id,
+                func.json_array_length(Calculator.images) > 0,
+            ).limit(1)
         )
         vi = vi_r.scalar_one_or_none()
         if vi:
@@ -159,15 +162,18 @@ async def list_calculators(
     )
     variants_map = {row.parent_id: row.cnt for row in variants_r}
 
-    # For base calcs with no images + exactly 1 variant, inherit the variant's image
-    imageless_single_variant_ids = [
-        c.id for c in calcs if not c.images and variants_map.get(c.id, 0) == 1
+    # For base calcs with no images, inherit from the first variant that has images
+    imageless_variant_ids = [
+        c.id for c in calcs if not c.images and variants_map.get(c.id, 0) > 0
     ]
     variant_image_map: dict = {}
-    if imageless_single_variant_ids:
+    if imageless_variant_ids:
         vi_r = await db.execute(
             select(Calculator.parent_id, Calculator.images)
-            .where(Calculator.parent_id.in_(imageless_single_variant_ids))
+            .where(
+                Calculator.parent_id.in_(imageless_variant_ids),
+                func.json_array_length(Calculator.images) > 0,
+            )
         )
         for row in vi_r:
             if row.images and row.parent_id not in variant_image_map:
@@ -347,14 +353,17 @@ async def batch_get_calculators(
     )
     variants_map = {row.parent_id: row.cnt for row in variants_r}
 
-    imageless_single_variant_ids = [
-        c.id for c in calcs if not c.images and variants_map.get(c.id, 0) == 1
+    imageless_variant_ids = [
+        c.id for c in calcs if not c.images and variants_map.get(c.id, 0) > 0
     ]
     variant_image_map: dict = {}
-    if imageless_single_variant_ids:
+    if imageless_variant_ids:
         vi_r = await db.execute(
             select(Calculator.parent_id, Calculator.images)
-            .where(Calculator.parent_id.in_(imageless_single_variant_ids))
+            .where(
+                Calculator.parent_id.in_(imageless_variant_ids),
+                func.json_array_length(Calculator.images) > 0,
+            )
         )
         for row in vi_r:
             if row.images and row.parent_id not in variant_image_map:
