@@ -264,6 +264,21 @@ export type WantedListing = {
   wanted_since: string;
 };
 
+export type TradeOffer = {
+  id: string;
+  from_user_id: string;
+  to_user_id: string;
+  from_username: string;
+  from_display_name: string | null;
+  to_username: string;
+  to_display_name: string | null;
+  offering_ids: string[];
+  requesting_ids: string[];
+  message: string | null;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+  created_at: string;
+};
+
 export type Message = {
   id: string;
   sender_id: string;
@@ -402,6 +417,7 @@ export const api = {
     brands: () => request<BrandSummary[]>('/api/v1/calculators/brands'),
     needsWork: (limit = 24) => request<Calculator[]>(`/api/v1/calculators/needs-work?limit=${limit}`),
     ownersAlsoOwn: (id: string) => request<Calculator[]>(`/api/v1/calculators/${id}/owners-also-own`),
+    owners: (id: string) => request<{username:string;display_name:string|null;avatar_url:string|null}[]>(`/api/v1/calculators/${id}/owners`),
     create: (data: Partial<Calculator>) =>
       request<Calculator>('/api/v1/calculators', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<Calculator>) =>
@@ -602,6 +618,18 @@ export const api = {
     listings: () => request<ForSaleListing[]>('/api/v1/collections/for-sale'),
     wanted: () => request<WantedListing[]>('/api/v1/collections/wanted'),
     matches: () => request<TradeMatch[]>('/api/v1/collections/trade-matches'),
+  },
+
+  tradeOffers: {
+    create: (data: { to_username: string; offering_ids: string[]; requesting_ids: string[]; message?: string }) =>
+      request<TradeOffer>('/api/v1/trade-offers', { method: 'POST', body: JSON.stringify(data) }),
+    list: (direction?: 'sent' | 'received' | 'all') => {
+      const q = direction ? `?direction=${direction}` : '';
+      return request<TradeOffer[]>(`/api/v1/trade-offers${q}`);
+    },
+    respond: (id: string, action: 'accept' | 'decline' | 'withdraw') =>
+      request<TradeOffer>(`/api/v1/trade-offers/${id}`, { method: 'PATCH', body: JSON.stringify({ action }) }),
+    pendingCount: () => request<{ pending_received: number }>('/api/v1/trade-offers/count'),
   },
 
   digest: {

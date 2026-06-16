@@ -111,6 +111,11 @@ export default function NewCalculatorPage() {
   const [dupWarning, setDupWarning] = useState<Calculator[]>([]);
   const dupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Wikipedia year suggestion
+  const [yearSuggestion, setYearSuggestion] = useState<number | null>(null);
+  const [yearLooking, setYearLooking] = useState(false);
+  const yearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     api.calculators.brands().then(setBrands).catch(() => {});
     api.calculators.tags().then(setAllTags).catch(() => {});
@@ -149,6 +154,38 @@ export default function NewCalculatorPage() {
       }
     }
   };
+
+  // Wikipedia year lookup — fires when make+model are both set and year_introduced is empty
+  useEffect(() => {
+    if (yearTimer.current) clearTimeout(yearTimer.current);
+    const make = form.make.trim();
+    const model = form.model.trim();
+    if (!make || !model || form.year_introduced) { setYearSuggestion(null); return; }
+    setYearLooking(true);
+    yearTimer.current = setTimeout(async () => {
+      try {
+        const q = encodeURIComponent(`${make} ${model} calculator`);
+        const res = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&srlimit=1&format=json&origin=*`
+        );
+        const data = await res.json();
+        const title: string = data?.query?.search?.[0]?.title ?? '';
+        if (!title) { setYearSuggestion(null); setYearLooking(false); return; }
+        const sumRes = await fetch(
+          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
+        );
+        const sum = await sumRes.json();
+        const text: string = sum?.extract ?? '';
+        const match = text.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+        setYearSuggestion(match ? parseInt(match[1]) : null);
+      } catch {
+        setYearSuggestion(null);
+      } finally {
+        setYearLooking(false);
+      }
+    }, 700);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.make, form.model]);
 
   // Debounced parent search
   useEffect(() => {
@@ -350,7 +387,28 @@ export default function NewCalculatorPage() {
               <p className="text-[10px] text-zinc-600 font-mono mt-1">Include the brand prefix — e.g. "TI-84 Plus", "HP-42S"</p>
             </div>
 
-            <Field label="Year introduced" value={form.year_introduced} onChange={set('year_introduced')} placeholder="1984" type="number" />
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="label mb-0">Year introduced</label>
+                {yearLooking && (
+                  <span className="text-[10px] font-mono text-zinc-600 animate-pulse">looking up…</span>
+                )}
+                {!yearLooking && yearSuggestion && !form.year_introduced && (
+                  <button
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, year_introduced: String(yearSuggestion) }))}
+                    className="text-[10px] font-mono text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1"
+                  >
+                    <span className="text-zinc-600">Wikipedia suggests</span> {yearSuggestion} →
+                  </button>
+                )}
+              </div>
+              <input
+                type="number" value={form.year_introduced} placeholder="1984"
+                onChange={set('year_introduced')}
+                className="input"
+              />
+            </div>
             <Field label="Year discontinued" value={form.year_discontinued} onChange={set('year_discontinued')} placeholder="still in production" type="number" />
           </div>
         </section>

@@ -12,6 +12,7 @@ from app.api.v1 import (
     notifications,
     stats,
     suggestions,
+    trade_offers,
     users,
 )
 
@@ -28,4 +29,5 @@ api_router.include_router(comments.router)
 api_router.include_router(follows.router)
 api_router.include_router(notifications.router)
 api_router.include_router(messages.router)
+api_router.include_router(trade_offers.router)
 api_router.include_router(digest.router)

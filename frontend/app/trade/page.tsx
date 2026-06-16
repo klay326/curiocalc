@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api, type ForSaleListing, type WantedListing, type TradeMatch } from '@/lib/api';
+import { api, type ForSaleListing, type WantedListing, type TradeMatch, type TradeOffer } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CONDITION_COLORS: Record<string, string> = {
@@ -11,6 +11,13 @@ const CONDITION_COLORS: Record<string, string> = {
   good:      'text-amber-400 bg-amber-950/40 border-amber-900/50',
   fair:      'text-orange-400 bg-orange-950/40 border-orange-900/50',
   poor:      'text-red-400 bg-red-950/40 border-red-900/50',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  pending:   'text-amber-400 bg-amber-950/40 border-amber-900/50',
+  accepted:  'text-emerald-400 bg-emerald-950/40 border-emerald-900/50',
+  declined:  'text-red-400 bg-red-950/40 border-red-900/50',
+  withdrawn: 'text-zinc-400 bg-zinc-800/60 border-zinc-700/50',
 };
 
 function MessageModal({ toUsername, calcId, calcName, onClose }: {
@@ -95,16 +102,283 @@ function MessageModal({ toUsername, calcId, calcName, onClose }: {
   );
 }
 
+function MakeOfferModal({ match, onClose, onSent }: {
+  match: TradeMatch;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [offeringIds, setOfferingIds] = useState<string[]>([]);
+  const [requestingIds, setRequestingIds] = useState<string[]>([]);
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const toggleId = (id: string, list: string[], setList: (v: string[]) => void) => {
+    setList(list.includes(id) ? list.filter(x => x !== id) : [...list, id]);
+  };
+
+  const send = async () => {
+    if (!user) { router.push('/login'); return; }
+    if (!offeringIds.length && !requestingIds.length) {
+      setError('Select at least one calculator on either side');
+      return;
+    }
+    setSending(true);
+    setError(null);
+    try {
+      await api.tradeOffers.create({
+        to_username: match.username,
+        offering_ids: offeringIds,
+        requesting_ids: requestingIds,
+        message: message.trim() || undefined,
+      });
+      setDone(true);
+      onSent();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send offer');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="font-mono font-bold text-zinc-100">Make trade offer</h3>
+            <p className="text-zinc-500 font-mono text-xs mt-0.5">to @{match.username}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-xl leading-none">✕</button>
+        </div>
+
+        {done ? (
+          <div className="text-center py-6">
+            <div className="text-3xl mb-3">🤝</div>
+            <p className="text-zinc-200 font-mono text-sm">Offer sent!</p>
+            <div className="flex gap-3 mt-4 justify-center">
+              <button onClick={onClose}
+                className="px-4 py-2 bg-zinc-800 rounded-lg font-mono text-sm text-zinc-300 hover:bg-zinc-700 transition-colors">
+                Close
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {error && <p className="text-red-400 font-mono text-xs mb-3">{error}</p>}
+
+            <div className="mb-4">
+              <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-2">
+                You offer (your for-sale calcs they want)
+              </p>
+              {match.they_want.length === 0 ? (
+                <p className="text-zinc-600 font-mono text-xs">No calcs to offer in this match</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {match.they_want.map(c => (
+                    <label key={c.id}
+                      className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
+                        offeringIds.includes(c.id)
+                          ? 'border-amber-700/60 bg-amber-950/20'
+                          : 'border-zinc-800 hover:border-zinc-700'
+                      }`}>
+                      <input
+                        type="checkbox"
+                        checked={offeringIds.includes(c.id)}
+                        onChange={() => toggleId(c.id, offeringIds, setOfferingIds)}
+                        className="accent-amber-400"
+                      />
+                      <div className="w-8 h-8 bg-zinc-800 rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {c.images[0]
+                          ? <img src={c.images[0]} alt="" className="w-full h-full object-contain" />
+                          : <span className="text-xs opacity-20">🧮</span>}
+                      </div>
+                      <div>
+                        <p className="font-mono text-xs text-zinc-200 font-bold">{c.model}</p>
+                        <p className="font-mono text-[10px] text-zinc-600">{c.make}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <p className="text-[9px] font-mono text-green-500 uppercase tracking-widest mb-2">
+                You request (their for-sale calcs you want)
+              </p>
+              {match.they_have.length === 0 ? (
+                <p className="text-zinc-600 font-mono text-xs">No calcs to request in this match</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {match.they_have.map(c => (
+                    <label key={c.id}
+                      className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
+                        requestingIds.includes(c.id)
+                          ? 'border-green-700/60 bg-green-950/20'
+                          : 'border-zinc-800 hover:border-zinc-700'
+                      }`}>
+                      <input
+                        type="checkbox"
+                        checked={requestingIds.includes(c.id)}
+                        onChange={() => toggleId(c.id, requestingIds, setRequestingIds)}
+                        className="accent-green-400"
+                      />
+                      <div className="w-8 h-8 bg-zinc-800 rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {c.images[0]
+                          ? <img src={c.images[0]} alt="" className="w-full h-full object-contain" />
+                          : <span className="text-xs opacity-20">🧮</span>}
+                      </div>
+                      <div>
+                        <p className="font-mono text-xs text-zinc-200 font-bold">{c.model}</p>
+                        <p className="font-mono text-[10px] text-zinc-600">{c.make}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-5">
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">Message (optional)</p>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                rows={3}
+                placeholder={`Hi @${match.username}, interested in a trade…`}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none focus:border-blue-500 transition-colors resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={onClose}
+                className="flex-1 px-4 py-2.5 bg-zinc-800 text-zinc-400 rounded-lg font-mono text-sm border border-zinc-700 hover:bg-zinc-700 transition-colors">
+                Cancel
+              </button>
+              <button onClick={send} disabled={sending}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-mono text-sm font-bold hover:bg-blue-500 transition-colors disabled:opacity-50">
+                {sending ? 'Sending…' : '🤝 Send offer'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OfferCard({ offer, myUserId, onAction }: {
+  offer: TradeOffer;
+  myUserId: string;
+  onAction: (id: string, action: 'accept' | 'decline' | 'withdraw') => Promise<void>;
+}) {
+  const [loading, setLoading] = useState(false);
+  const isSender = offer.from_user_id === myUserId;
+  const otherName = isSender
+    ? (offer.to_display_name ?? offer.to_username)
+    : (offer.from_display_name ?? offer.from_username);
+  const otherUsername = isSender ? offer.to_username : offer.from_username;
+
+  const act = async (action: 'accept' | 'decline' | 'withdraw') => {
+    setLoading(true);
+    try { await onAction(offer.id, action); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-mono text-zinc-500">{isSender ? 'To' : 'From'}</span>
+          <Link href={`/u/${otherUsername}`}
+            className="font-mono text-sm font-bold text-zinc-100 hover:text-amber-400 transition-colors truncate">
+            {otherName}
+          </Link>
+          <span className="text-[10px] font-mono text-zinc-600">@{otherUsername}</span>
+        </div>
+        <span className={`text-[10px] px-2 py-0.5 rounded border font-mono capitalize flex-shrink-0 ${STATUS_COLORS[offer.status] ?? 'text-zinc-400 bg-zinc-800 border-zinc-700'}`}>
+          {offer.status}
+        </span>
+      </div>
+
+      <div className="flex gap-4 mb-3">
+        <div className="flex-1">
+          <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-1">Offering</p>
+          <p className="font-mono text-sm text-zinc-200 font-bold">
+            {offer.offering_ids.length} calc{offer.offering_ids.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div className="text-zinc-700 font-mono text-lg self-center">⇄</div>
+        <div className="flex-1">
+          <p className="text-[9px] font-mono text-green-500 uppercase tracking-widest mb-1">Requesting</p>
+          <p className="font-mono text-sm text-zinc-200 font-bold">
+            {offer.requesting_ids.length} calc{offer.requesting_ids.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+      </div>
+
+      {offer.message && (
+        <p className="text-xs font-mono text-zinc-500 bg-zinc-800/60 rounded-lg px-3 py-2 mb-3 line-clamp-2">
+          {offer.message}
+        </p>
+      )}
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-mono text-zinc-700">
+          {new Date(offer.created_at).toLocaleDateString()}
+        </span>
+        {offer.status === 'pending' && (
+          <div className="flex gap-2">
+            {!isSender && (
+              <>
+                <button
+                  onClick={() => act('decline')}
+                  disabled={loading}
+                  className="px-3 py-1.5 text-[11px] font-mono text-red-400 border border-red-900/40 hover:border-red-700/60 rounded-lg transition-colors disabled:opacity-50">
+                  Decline
+                </button>
+                <button
+                  onClick={() => act('accept')}
+                  disabled={loading}
+                  className="px-3 py-1.5 text-[11px] font-mono font-bold text-emerald-400 border border-emerald-900/40 hover:border-emerald-700/60 bg-emerald-950/20 rounded-lg transition-colors disabled:opacity-50">
+                  Accept
+                </button>
+              </>
+            )}
+            {isSender && (
+              <button
+                onClick={() => act('withdraw')}
+                disabled={loading}
+                className="px-3 py-1.5 text-[11px] font-mono text-zinc-400 border border-zinc-700 hover:border-zinc-600 rounded-lg transition-colors disabled:opacity-50">
+                Withdraw
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TradePage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<'for_sale' | 'wanted' | 'matches'>('for_sale');
+  const [tab, setTab] = useState<'for_sale' | 'wanted' | 'matches' | 'offers'>('for_sale');
   const [listings, setListings] = useState<ForSaleListing[]>([]);
   const [wanted, setWanted] = useState<WantedListing[]>([]);
   const [matches, setMatches] = useState<TradeMatch[]>([]);
+  const [offers, setOffers] = useState<TradeOffer[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
+  const [offersLoading, setOffersLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [messageTarget, setMessageTarget] = useState<{ username: string; calcId: string; calcName: string } | null>(null);
+  const [offerTarget, setOfferTarget] = useState<TradeMatch | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     Promise.all([api.trade.listings(), api.trade.wanted()])
@@ -114,6 +388,13 @@ export default function TradePage() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+    api.tradeOffers.pendingCount()
+      .then(r => setPendingCount(r.pending_received))
+      .catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
     if (tab !== 'matches' || !user || matches.length > 0) return;
     setMatchesLoading(true);
     api.trade.matches()
@@ -121,6 +402,25 @@ export default function TradePage() {
       .catch(() => {})
       .finally(() => setMatchesLoading(false));
   }, [tab, user, matches.length]);
+
+  useEffect(() => {
+    if (tab !== 'offers' || !user) return;
+    setOffersLoading(true);
+    api.tradeOffers.list()
+      .then(setOffers)
+      .catch(() => {})
+      .finally(() => setOffersLoading(false));
+  }, [tab, user]);
+
+  const handleOfferAction = async (id: string, action: 'accept' | 'decline' | 'withdraw') => {
+    const updated = await api.tradeOffers.respond(id, action);
+    setOffers(prev => prev.map(o => o.id === updated.id ? updated : o));
+    if (action !== 'withdraw') {
+      api.tradeOffers.pendingCount()
+        .then(r => setPendingCount(r.pending_received))
+        .catch(() => {});
+    }
+  };
 
   const filteredListings = listings.filter(l => {
     if (!query) return true;
@@ -136,13 +436,16 @@ export default function TradePage() {
       w.wisher_username.toLowerCase().includes(q);
   });
 
-  // Group wanted by calc for demand view
   const demandMap: Record<string, { listing: WantedListing; count: number }> = {};
   for (const w of wanted) {
     if (!demandMap[w.calculator_id]) demandMap[w.calculator_id] = { listing: w, count: 0 };
     demandMap[w.calculator_id].count++;
   }
   const demand = Object.values(demandMap).sort((a, b) => b.count - a.count);
+
+  const receivedOffers = offers.filter(o => o.to_user_id === user?.id);
+  const sentOffers = offers.filter(o => o.from_user_id === user?.id);
+  const pendingReceived = receivedOffers.filter(o => o.status === 'pending');
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -152,6 +455,22 @@ export default function TradePage() {
           calcId={messageTarget.calcId}
           calcName={messageTarget.calcName}
           onClose={() => setMessageTarget(null)}
+        />
+      )}
+      {offerTarget && (
+        <MakeOfferModal
+          match={offerTarget}
+          onClose={() => setOfferTarget(null)}
+          onSent={() => {
+            setOfferTarget(null);
+            if (tab === 'offers') {
+              setOffersLoading(true);
+              api.tradeOffers.list()
+                .then(setOffers)
+                .catch(() => {})
+                .finally(() => setOffersLoading(false));
+            }
+          }}
         />
       )}
 
@@ -165,8 +484,7 @@ export default function TradePage() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
         <button onClick={() => setTab('for_sale')}
           className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors ${
             tab === 'for_sale' ? 'bg-green-900/60 text-green-300 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -187,15 +505,30 @@ export default function TradePage() {
             🔀 Matches
           </button>
         )}
+        {user && (
+          <button onClick={() => setTab('offers')}
+            className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors relative ${
+              tab === 'offers' ? 'bg-purple-900/40 text-purple-300 font-bold' : 'text-zinc-500 hover:text-zinc-300'
+            }`}>
+            🤝 Offers
+            {pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
-      <input
-        type="text"
-        placeholder={tab === 'for_sale' ? 'Search listings…' : 'Search wanted calcs…'}
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-100 placeholder-zinc-600 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors mb-8"
-      />
+      {tab !== 'offers' && (
+        <input
+          type="text"
+          placeholder={tab === 'for_sale' ? 'Search listings…' : 'Search wanted calcs…'}
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-100 placeholder-zinc-600 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors mb-8"
+        />
+      )}
 
       {loading ? (
         <div className="space-y-3">
@@ -363,11 +696,18 @@ export default function TradePage() {
                     </Link>
                     <p className="text-[10px] font-mono text-zinc-600">@{m.username}</p>
                   </div>
-                  <button
-                    onClick={() => setMessageTarget({ username: m.username, calcId: m.they_have[0]?.id ?? '', calcName: `${m.they_have[0]?.make} ${m.they_have[0]?.model}` })}
-                    className="text-[11px] font-mono text-blue-400 hover:text-blue-300 border border-blue-900/40 hover:border-blue-700/60 px-2.5 py-1 rounded-lg transition-colors flex-shrink-0">
-                    ✉ Message
-                  </button>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setOfferTarget(m)}
+                      className="text-[11px] font-mono text-purple-400 hover:text-purple-300 border border-purple-900/40 hover:border-purple-700/60 px-2.5 py-1 rounded-lg transition-colors">
+                      🤝 Offer
+                    </button>
+                    <button
+                      onClick={() => setMessageTarget({ username: m.username, calcId: m.they_have[0]?.id ?? '', calcName: `${m.they_have[0]?.make} ${m.they_have[0]?.model}` })}
+                      className="text-[11px] font-mono text-blue-400 hover:text-blue-300 border border-blue-900/40 hover:border-blue-700/60 px-2.5 py-1 rounded-lg transition-colors">
+                      ✉ Message
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -399,6 +739,57 @@ export default function TradePage() {
                 </div>
               </div>
             ))}
+          </div>
+        )
+      ) : tab === 'offers' ? (
+        offersLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => <div key={i} className="h-28 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />)}
+          </div>
+        ) : offers.length === 0 ? (
+          <div className="text-center py-20 text-zinc-600 font-mono">
+            <div className="text-4xl mb-3">🤝</div>
+            <p className="text-sm font-bold mb-1">No trade offers yet</p>
+            <p className="text-xs text-zinc-700 max-w-xs mx-auto">Find a match and click "Offer" to propose a trade.</p>
+            <button onClick={() => setTab('matches')}
+              className="text-xs font-mono text-purple-400 hover:text-purple-300 border border-purple-900/40 px-3 py-1.5 rounded-lg transition-colors mt-4 inline-block">
+              View matches →
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {pendingReceived.length > 0 && (
+              <div>
+                <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">
+                  Pending — {pendingReceived.length} received
+                </p>
+                <div className="space-y-3">
+                  {pendingReceived.map(o => (
+                    <OfferCard key={o.id} offer={o} myUserId={user!.id} onAction={handleOfferAction} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {receivedOffers.filter(o => o.status !== 'pending').length > 0 && (
+              <div>
+                <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Received</p>
+                <div className="space-y-3">
+                  {receivedOffers.filter(o => o.status !== 'pending').map(o => (
+                    <OfferCard key={o.id} offer={o} myUserId={user!.id} onAction={handleOfferAction} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {sentOffers.length > 0 && (
+              <div>
+                <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Sent</p>
+                <div className="space-y-3">
+                  {sentOffers.map(o => (
+                    <OfferCard key={o.id} offer={o} myUserId={user!.id} onAction={handleOfferAction} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )
       ) : null}

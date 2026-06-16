@@ -5,6 +5,7 @@ from app.models.follow import Follow
 from app.models.image_submission import ImageSubmission
 from app.models.notification import Notification
 from app.models.suggestion import EditSuggestion
+from app.models.trade_offer import TradeOffer
 from app.models.user import User
 
-__all__ = ["User", "Calculator", "CollectionEntry", "CollectionStatus", "Condition", "Visibility", "EditSuggestion", "Comment", "Follow", "Notification", "ImageSubmission"]
+__all__ = ["User", "Calculator", "CollectionEntry", "CollectionStatus", "Condition", "Visibility", "EditSuggestion", "Comment", "Follow", "Notification", "ImageSubmission", "TradeOffer"]

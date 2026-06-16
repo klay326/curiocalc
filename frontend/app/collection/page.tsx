@@ -474,30 +474,48 @@ function StatsTab({ entries }: { entries: EntryWithCalc[] }) {
   const decadeCounts: Record<string, number> = {};
   const conditionOrder = ['mint', 'excellent', 'good', 'fair', 'poor'];
   const conditionCounts: Record<string, number> = {};
+  const displayCounts: Record<string, number> = {};
+  const powerCounts: Record<string, number> = {};
+  const countryCounts: Record<string, number> = {};
   let totalSpent = 0;
   let spentCount = 0;
+  let oldestYear = Infinity;
+  let newestYear = -Infinity;
 
   for (const e of owned) {
     if (e.calculator?.make) brandCounts[e.calculator.make] = (brandCounts[e.calculator.make] ?? 0) + 1;
     if (e.calculator?.calc_type) typeCounts[e.calculator.calc_type] = (typeCounts[e.calculator.calc_type] ?? 0) + 1;
     if (e.calculator?.year_introduced) {
-      const decade = `${Math.floor(e.calculator.year_introduced / 10) * 10}s`;
+      const yr = e.calculator.year_introduced;
+      const decade = `${Math.floor(yr / 10) * 10}s`;
       decadeCounts[decade] = (decadeCounts[decade] ?? 0) + 1;
+      if (yr < oldestYear) oldestYear = yr;
+      if (yr > newestYear) newestYear = yr;
     }
     if (e.acquired_price != null) { totalSpent += e.acquired_price; spentCount++; }
     if (e.condition) conditionCounts[e.condition] = (conditionCounts[e.condition] ?? 0) + 1;
+    if (e.calculator?.display_type) displayCounts[e.calculator.display_type] = (displayCounts[e.calculator.display_type] ?? 0) + 1;
+    if (e.calculator?.power_source) {
+      const ps = e.calculator.power_source.split(/[,/]/)[0].trim();
+      powerCounts[ps] = (powerCounts[ps] ?? 0) + 1;
+    }
+    if (e.calculator?.country_of_origin) countryCounts[e.calculator.country_of_origin] = (countryCounts[e.calculator.country_of_origin] ?? 0) + 1;
   }
 
-  const topBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const topTypes  = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
-  const decades   = Object.entries(decadeCounts).sort((a, b) => a[0].localeCompare(b[0]));
-  const conditions = conditionOrder
+  const topBrands   = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const topTypes    = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+  const decades     = Object.entries(decadeCounts).sort((a, b) => a[0].localeCompare(b[0]));
+  const topDisplay  = Object.entries(displayCounts).sort((a, b) => b[1] - a[1]);
+  const topPower    = Object.entries(powerCounts).sort((a, b) => b[1] - a[1]);
+  const topCountry  = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const conditions  = conditionOrder
     .filter(c => conditionCounts[c])
     .map(c => [c, conditionCounts[c]] as [string, number]);
 
-  const uniqueBrands = Object.keys(brandCounts).length;
-  const uniqueTypes  = Object.keys(typeCounts).length;
-  const avgSpend = spentCount > 0 ? totalSpent / spentCount : null;
+  const uniqueBrands  = Object.keys(brandCounts).length;
+  const uniqueTypes   = Object.keys(typeCounts).length;
+  const avgSpend      = spentCount > 0 ? totalSpent / spentCount : null;
+  const yearSpan      = oldestYear !== Infinity && newestYear !== -Infinity ? newestYear - oldestYear : null;
 
   // Monthly spend chart
   const monthlySpend: Record<string, number> = {};
@@ -532,6 +550,12 @@ function StatsTab({ entries }: { entries: EntryWithCalc[] }) {
             ? [{ label: 'Total spent', value: `$${totalSpent.toLocaleString()}`, color: 'text-green-400' }]
             : avgSpend != null
             ? [{ label: 'Avg price', value: `$${avgSpend.toFixed(0)}`, color: 'text-green-400' }]
+            : []),
+          ...(yearSpan !== null
+            ? [{ label: 'Year span', value: `${yearSpan}y`, color: 'text-orange-400' }]
+            : []),
+          ...(oldestYear !== Infinity
+            ? [{ label: 'Oldest', value: String(oldestYear), color: 'text-zinc-400' }]
             : []),
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-center">
@@ -571,6 +595,30 @@ function StatsTab({ entries }: { entries: EntryWithCalc[] }) {
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-4">Condition</p>
             <BarChart rows={conditions} color="bg-green-500" />
+          </div>
+        )}
+
+        {/* Display type */}
+        {topDisplay.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-4">Display Type</p>
+            <BarChart rows={topDisplay} color="bg-cyan-500" />
+          </div>
+        )}
+
+        {/* Power source */}
+        {topPower.length > 1 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-4">Power Source</p>
+            <BarChart rows={topPower} color="bg-yellow-500" />
+          </div>
+        )}
+
+        {/* Country */}
+        {topCountry.length > 1 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-4">Country of Origin</p>
+            <BarChart rows={topCountry} color="bg-pink-500" />
           </div>
         )}
       </div>

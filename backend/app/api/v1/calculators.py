@@ -556,6 +556,19 @@ async def get_also_owned(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     ]
 
 
+@router.get("/{calc_id}/owners")
+async def get_calc_owners(calc_id: str, db: AsyncSession = Depends(get_db)):
+    """Return up to 20 users who own this calculator."""
+    r = await db.execute(
+        select(User.username, User.display_name, User.avatar_url)
+        .join(CollectionEntry, CollectionEntry.user_id == User.id)
+        .where(CollectionEntry.calculator_id == calc_id, CollectionEntry.status == "owned")
+        .order_by(CollectionEntry.created_at.desc())
+        .limit(20)
+    )
+    return [{"username": row.username, "display_name": row.display_name, "avatar_url": row.avatar_url} for row in r]
+
+
 @router.post("", response_model=CalculatorPublic, status_code=status.HTTP_201_CREATED)
 async def create_calculator(
     payload: CalculatorCreate,

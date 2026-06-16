@@ -590,6 +590,7 @@ export default function CalculatorPage() {
       )}
 
       {/* Comments */}
+      <OwnersSection calcId={calc.id} ownerCount={calc.owner_count} />
       <CommentsSection calcId={calc.id} currentUser={user} />
 
       {/* Collection Modal */}
@@ -1333,6 +1334,45 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
           <span className={(hovered || value) >= n ? 'text-amber-400' : 'text-zinc-700'}>★</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+function OwnersSection({ calcId, ownerCount }: { calcId: string; ownerCount: number }) {
+  const [owners, setOwners] = useState<{username:string;display_name:string|null;avatar_url:string|null}[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.calculators.owners(calcId).then(o => { setOwners(o); setLoaded(true); }).catch(() => setLoaded(true));
+  }, [calcId]);
+
+  if (ownerCount === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">
+        In {ownerCount} collection{ownerCount !== 1 ? 's' : ''}
+      </p>
+      {!loaded ? (
+        <div className="flex gap-2">
+          {[1,2,3].map(i => <div key={i} className="w-8 h-8 rounded-full bg-zinc-800 animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {owners.map(o => (
+            <Link key={o.username} href={`/u/${o.username}`}
+              className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 hover:border-amber-400/30 rounded-full pl-0.5 pr-2.5 py-0.5 transition-colors group">
+              <div className="w-6 h-6 rounded-full bg-amber-900/40 border border-amber-900/30 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                {o.avatar_url
+                  ? <img src={o.avatar_url} alt="" className="w-full h-full object-cover" />
+                  : <span className="text-[10px] font-bold text-amber-400 font-mono">{(o.display_name ?? o.username).charAt(0).toUpperCase()}</span>
+                }
+              </div>
+              <span className="text-[11px] font-mono text-zinc-400 group-hover:text-amber-400 transition-colors">{o.display_name ?? o.username}</span>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
