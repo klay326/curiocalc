@@ -62,6 +62,14 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>CurioCalc needs camera access to photograph your calculators.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CurioCalc needs photo library access to upload calculator images.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>CurioCalc can save calculator photos to your library.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CurioCalc may request microphone access when using the camera.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>WKAppBoundDomains</key>

@@ -265,7 +265,7 @@ function BottomTabBar() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950 border-t border-zinc-800"
+      className="fixed-bar md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950 border-t border-zinc-800"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="flex h-14">
@@ -383,7 +383,7 @@ export function Nav() {
 
   return (
     <>
-      <nav className="nav-safe-top border-b border-zinc-800 bg-zinc-950 fixed top-0 left-0 right-0 md:sticky md:bg-zinc-950/90 md:backdrop-blur-sm z-50">
+      <nav className="fixed-bar nav-safe-top border-b border-zinc-800 bg-zinc-950 fixed top-0 left-0 right-0 md:sticky md:bg-zinc-950/90 md:backdrop-blur-sm z-50">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 font-mono font-bold text-amber-400 hover:text-amber-300 transition-colors flex-shrink-0">

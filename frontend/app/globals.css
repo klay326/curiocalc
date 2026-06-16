@@ -6,11 +6,23 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  /* Prevent rubber-band bounce from moving fixed elements on iOS */
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background-color: var(--color-zinc-950);
   color: var(--color-zinc-100);
   font-family: Arial, Helvetica, sans-serif;
   transition: background-color 0.2s, color 0.2s;
+  /* iOS scroll: overflow on body (not html) keeps fixed elements stable */
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Mobile: fixed nav + bottom tab bar clearance */
@@ -24,6 +36,15 @@ body {
 /* Nav clears iOS status bar / notch */
 .nav-safe-top {
   padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Force fixed bars onto GPU layer to prevent scroll jitter on iOS */
+.fixed-bar {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* ─── Shared form utilities ─────────────────────────────────────── */
