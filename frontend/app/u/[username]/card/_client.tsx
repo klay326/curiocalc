@@ -8,6 +8,7 @@ export default function CollectionCardClient({ username }: { username: string })
   const [calcs, setCalcs] = useState<Calculator[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -27,11 +28,33 @@ export default function CollectionCardClient({ username }: { username: string })
       .finally(() => setLoading(false));
   }, [username]);
 
+  const cardUrl = `https://curiocalc.org/u/${username}/card`;
+
   const copyLink = () => {
-    navigator.clipboard.writeText(`https://curiocalc.org/u/${username}/card`).then(() => {
+    navigator.clipboard.writeText(cardUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const nativeShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: `${profile?.display_name ?? username}'s calculator collection`,
+        text: `Check out my vintage calculator collection on CurioCalc!`,
+        url: cardUrl,
+      }).then(() => {
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      }).catch(() => {});
+    } else {
+      copyLink();
+    }
+  };
+
+  const twitterShare = () => {
+    const text = encodeURIComponent(`Check out my vintage calculator collection on CurioCalc! ${cardUrl}`);
+    window.open(`https://x.com/intent/tweet?text=${text}`, '_blank', 'noopener,noreferrer');
   };
 
   if (loading) {
@@ -142,10 +165,22 @@ export default function CollectionCardClient({ username }: { username: string })
           View full profile →
         </Link>
         <button
+          onClick={nativeShare}
+          className="px-4 py-2 bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors"
+        >
+          {shared ? '✓ Shared!' : '↑ Share'}
+        </button>
+        <button
           onClick={copyLink}
           className="px-4 py-2 bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors"
         >
           {copied ? '✓ Copied!' : '🔗 Copy link'}
+        </button>
+        <button
+          onClick={twitterShare}
+          className="px-4 py-2 bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors"
+        >
+          Post to X
         </button>
       </div>
     </div>

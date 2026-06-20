@@ -49,5 +49,8 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     NOTIFICATION_EMAIL: str = "klay.adams326@gmail.com"
 
+    # Digest cron secret (for the /digest/send-all-cron endpoint)
+    DIGEST_SECRET: str = ""
+
 
 settings = Settings()

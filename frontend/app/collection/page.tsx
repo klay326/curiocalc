@@ -723,7 +723,13 @@ export default function CollectionPage() {
           <h1 className="text-2xl font-bold font-mono text-amber-400">My Collection</h1>
           <p className="text-zinc-600 text-xs font-mono mt-1">@{user.username}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          <Link
+            href={`/u/${user.username}/card`}
+            className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            🪪 My card
+          </Link>
           <CsvImport onImported={(added) => setEntries(prev => [...prev, ...added])} />
           <button
             onClick={() => exportCSV(entries, user.username)}

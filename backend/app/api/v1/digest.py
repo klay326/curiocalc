@@ -5,6 +5,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.config import settings
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.follow import Follow
@@ -115,6 +116,49 @@ async def send_all_digests(
     """Admin-only: send weekly digest to all active users."""
     if not me.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser only")
+
+    users_r = await db.execute(select(User).where(User.is_active.is_(True)))
+    users = users_r.scalars().all()
+
+    sent = 0
+    for user in users:
+        data = await _build_digest_for(user, db)
+        if not data:
+            continue
+        activity = data["activity"]
+        for_sale = data["for_sale"]
+
+        lines = ["<h2 style='font-family:monospace'>Your CurioCalc Week</h2>"]
+        lines.append("<h3 style='font-family:monospace'>Activity from people you follow</h3><ul>")
+        for entry, u, calc in activity[:10]:
+            verb = {"owned": "added to collection", "wanted": "added to wishlist", "for_sale": "listed for sale"}.get(entry.status, entry.status)
+            lines.append(f"<li><b>@{u.username}</b> {verb}: <a href='https://curiocalc.org/calculators/{calc.id}'>{calc.make} {calc.model}</a></li>")
+        lines.append("</ul>")
+        if for_sale:
+            lines.append("<h3 style='font-family:monospace'>Wishlist items now for sale</h3><ul>")
+            for item in for_sale:
+                price = f" — ${item['price']}" if item['price'] else ""
+                lines.append(f"<li><b>{item['make']} {item['model']}</b> listed by @{item['seller']}{price}</li>")
+            lines.append("</ul>")
+        lines.append("<p style='font-family:monospace;color:#888;font-size:12px'>You're receiving this because you have an account at curiocalc.org. <a href='https://curiocalc.org/settings'>Manage preferences</a></p>")
+
+        try:
+            await _send_to(user.email, "Your CurioCalc weekly digest", "\n".join(lines))
+            sent += 1
+        except Exception:
+            pass
+
+    return {"sent": sent, "total": len(users)}
+
+
+@router.post("/send-all-cron")
+async def send_all_digests_cron(
+    secret: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Called by the server cron job — verified by DIGEST_SECRET, no user auth required."""
+    if not settings.DIGEST_SECRET or secret != settings.DIGEST_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid secret")
 
     users_r = await db.execute(select(User).where(User.is_active.is_(True)))
     users = users_r.scalars().all()
