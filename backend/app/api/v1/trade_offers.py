@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.models.trade_offer import TradeOffer
 from app.models.user import User
+from app.services.push import send_push_to_user
 
 router = APIRouter(prefix="/trade-offers", tags=["trade-offers"])
 
@@ -67,6 +68,8 @@ async def create_offer(
     db.add(offer)
     await db.commit()
     await db.refresh(offer)
+    name = me.display_name or f"@{me.username}"
+    await send_push_to_user(recipient.id, db, "New trade offer", f"{name} sent you a trade offer")
     return _serialize(offer, me, recipient)
 
 
@@ -150,6 +153,10 @@ async def respond_to_offer(
 
     await db.commit()
     await db.refresh(offer)
+
+    if action == "accept":
+        name = me.display_name or f"@{me.username}"
+        await send_push_to_user(offer.from_user_id, db, "Trade offer accepted", f"{name} accepted your trade offer")
 
     from_r = await db.execute(select(User).where(User.id == offer.from_user_id))
     from_user = from_r.scalar_one()

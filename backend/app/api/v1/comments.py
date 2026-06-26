@@ -13,6 +13,7 @@ from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.comment import CommentCreate, CommentPublic
 from app.services.email import send_comment_email
+from app.services.push import send_push_to_user
 
 router = APIRouter(tags=["comments"])
 
@@ -68,7 +69,7 @@ async def create_comment(
     calc = calc_r.scalar_one_or_none()
     if calc:
         owners_r = await db.execute(
-            select(CollectionEntry.user_id, User.email)
+            select(CollectionEntry.user_id, User.email, User.notification_prefs)
             .join(User, User.id == CollectionEntry.user_id)
             .where(
                 CollectionEntry.calculator_id == calc_id,
@@ -79,7 +80,7 @@ async def create_comment(
         )
         owner_rows = owners_r.all()
         snippet = payload.content[:120] if payload.content else ""
-        for uid, owner_email in owner_rows:
+        for uid, owner_email, owner_prefs in owner_rows:
             db.add(Notification(
                 user_id=uid,
                 type="comment",
@@ -94,7 +95,13 @@ async def create_comment(
             ))
         if owner_rows:
             await db.commit()
-            for _, owner_email in owner_rows:
+            for uid, owner_email, owner_prefs in owner_rows:
+                await send_push_to_user(
+                    uid, db, f"New comment on {calc.make} {calc.model}",
+                    f"@{current_user.username}: {snippet}",
+                )
+                if not (owner_prefs or {}).get("email_comment", True):
+                    continue
                 await send_comment_email(
                     owner_email,
                     current_user.username,

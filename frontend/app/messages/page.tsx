@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Message } from '@/lib/api';
+import { api, type Message, type Conversation } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 function timeAgo(iso: string) {
@@ -32,52 +32,64 @@ function Avatar({ username, display_name, avatar_url, size = 8 }: {
 export default function MessagesPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'inbox' | 'sent'>('inbox');
-  const [inbox, setInbox] = useState<Message[]>([]);
-  const [sent, setSent] = useState<Message[]>([]);
-  const [unread, setUnread] = useState(0);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Message | null>(null);
+  const [activeUsername, setActiveUsername] = useState<string | null>(null);
+  const [thread, setThread] = useState<Message[]>([]);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [replyBody, setReplyBody] = useState('');
+  const [sending, setSending] = useState(false);
   const [composeTo, setComposeTo] = useState('');
   const [composeBody, setComposeBody] = useState('');
   const [composeSending, setComposeSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [showCompose, setShowCompose] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
   }, [user, authLoading, router]);
 
-  const load = async () => {
+  const loadConversations = async () => {
     setLoading(true);
-    try {
-      const [inboxData, sentData] = await Promise.all([
-        api.messages.inbox(),
-        api.messages.sent(),
-      ]);
-      setInbox(inboxData.messages);
-      setUnread(inboxData.unread);
-      setSent(sentData);
-    } catch { /* ignore */ }
+    try { setConversations(await api.messages.conversations()); }
+    catch { /* ignore */ }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { if (user) load(); }, [user]); // eslint-disable-line
+  useEffect(() => { if (user) loadConversations(); }, [user]); // eslint-disable-line
 
-  const open = async (msg: Message) => {
-    setSelected(msg);
-    if (!msg.read && msg.recipient_id === user?.id) {
-      await api.messages.markRead(msg.id).catch(() => {});
-      setInbox(prev => prev.map(m => m.id === msg.id ? { ...m, read: true } : m));
-      setUnread(n => Math.max(0, n - 1));
-    }
+  const openThread = async (username: string) => {
+    setActiveUsername(username);
+    setThreadLoading(true);
+    try {
+      const msgs = await api.messages.thread(username);
+      setThread(msgs);
+      setConversations(prev => prev.map(c => c.username === username ? { ...c, unread_count: 0 } : c));
+    } catch { /* ignore */ }
+    finally { setThreadLoading(false); }
   };
 
-  const del = async (msg: Message) => {
-    await api.messages.delete(msg.id).catch(() => {});
-    if (tab === 'inbox') setInbox(prev => prev.filter(m => m.id !== msg.id));
-    else setSent(prev => prev.filter(m => m.id !== msg.id));
-    if (selected?.id === msg.id) setSelected(null);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thread]);
+
+  const sendReply = async () => {
+    if (!activeUsername || !replyBody.trim()) return;
+    setSending(true);
+    try {
+      const msg = await api.messages.send({ recipient_username: activeUsername, body: replyBody.trim() });
+      setThread(prev => [...prev, msg]);
+      setReplyBody('');
+      setConversations(prev => {
+        const existing = prev.find(c => c.username === activeUsername);
+        const updated: Conversation = existing
+          ? { ...existing, last_body: msg.body, last_created_at: msg.created_at, last_from_me: true }
+          : { username: activeUsername, display_name: null, avatar_url: null, last_body: msg.body, last_created_at: msg.created_at, last_from_me: true, unread_count: 0 };
+        return [updated, ...prev.filter(c => c.username !== activeUsername)];
+      });
+    } catch { /* ignore */ }
+    finally { setSending(false); }
   };
 
   const sendCompose = async () => {
@@ -85,12 +97,13 @@ export default function MessagesPage() {
     setComposeSending(true);
     setComposeError(null);
     try {
-      const msg = await api.messages.send({ recipient_username: composeTo.trim(), body: composeBody.trim() });
-      setSent(prev => [msg, ...prev]);
+      await api.messages.send({ recipient_username: composeTo.trim(), body: composeBody.trim() });
       setShowCompose(false);
+      const target = composeTo.trim();
       setComposeTo('');
       setComposeBody('');
-      setTab('sent');
+      await loadConversations();
+      await openThread(target);
     } catch (e) {
       setComposeError(e instanceof Error ? e.message : 'Failed to send');
     } finally {
@@ -99,15 +112,16 @@ export default function MessagesPage() {
   };
 
   if (authLoading || !user) return null;
-  const list = tab === 'inbox' ? inbox : sent;
+  const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
+  const active = conversations.find(c => c.username === activeUsername);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold font-mono text-amber-400">Messages</h1>
-          {unread > 0 && (
-            <p className="text-xs font-mono text-zinc-500 mt-0.5">{unread} unread</p>
+          {totalUnread > 0 && (
+            <p className="text-xs font-mono text-zinc-500 mt-0.5">{totalUnread} unread</p>
           )}
         </div>
         <button onClick={() => setShowCompose(true)}
@@ -154,102 +168,97 @@ export default function MessagesPage() {
         </div>
       )}
 
-      <div className="flex gap-1 mb-4 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
-        {([['inbox', `Inbox${unread > 0 ? ` (${unread})` : ''}`], ['sent', 'Sent']] as const).map(([key, label]) => (
-          <button key={key} onClick={() => { setTab(key); setSelected(null); }}
-            className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors ${
-              tab === key ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
-            }`}>{label}</button>
-        ))}
-      </div>
-
       <div className="grid md:grid-cols-5 gap-4">
-        {/* List */}
+        {/* Conversation list */}
         <div className="md:col-span-2 space-y-1">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="h-16 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
             ))
-          ) : list.length === 0 ? (
-            <div className="text-center py-12 text-zinc-600 font-mono text-sm">
-              {tab === 'inbox' ? 'No messages yet.' : 'Nothing sent yet.'}
-            </div>
-          ) : list.map(msg => {
-            const other = tab === 'inbox'
-              ? { username: msg.sender_username, display_name: msg.sender_display_name, avatar_url: msg.sender_avatar_url }
-              : { username: msg.recipient_username, display_name: msg.recipient_display_name, avatar_url: null };
-            const isUnread = !msg.read && tab === 'inbox';
-            return (
-              <button key={msg.id} onClick={() => open(msg)}
-                className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-                  selected?.id === msg.id
-                    ? 'bg-zinc-800 border-amber-400/30'
-                    : isUnread
-                      ? 'bg-zinc-900/80 border-amber-900/30 hover:border-zinc-700'
-                      : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
-                }`}>
-                <Avatar {...other} size={8} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={`text-xs font-mono truncate ${isUnread ? 'font-bold text-zinc-100' : 'text-zinc-300'}`}>
-                      @{other.username}
-                    </p>
-                    <span className="text-[10px] font-mono text-zinc-600 flex-shrink-0">{timeAgo(msg.created_at)}</span>
-                  </div>
-                  {msg.calc_make && (
-                    <p className="text-[10px] font-mono text-amber-600 truncate">{msg.calc_make} {msg.calc_model}</p>
-                  )}
-                  <p className="text-[11px] text-zinc-600 truncate mt-0.5">{msg.body}</p>
+          ) : conversations.length === 0 ? (
+            <div className="text-center py-12 text-zinc-600 font-mono text-sm">No conversations yet.</div>
+          ) : conversations.map(c => (
+            <button key={c.username} onClick={() => openThread(c.username)}
+              className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                activeUsername === c.username
+                  ? 'bg-zinc-800 border-amber-400/30'
+                  : c.unread_count > 0
+                    ? 'bg-zinc-900/80 border-amber-900/30 hover:border-zinc-700'
+                    : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+              }`}>
+              <Avatar username={c.username} display_name={c.display_name} avatar_url={c.avatar_url} size={8} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className={`text-xs font-mono truncate ${c.unread_count > 0 ? 'font-bold text-zinc-100' : 'text-zinc-300'}`}>
+                    @{c.username}
+                  </p>
+                  <span className="text-[10px] font-mono text-zinc-600 flex-shrink-0">{timeAgo(c.last_created_at)}</span>
                 </div>
-                {isUnread && <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-1.5" />}
-              </button>
-            );
-          })}
+                <p className="text-[11px] text-zinc-600 truncate mt-0.5">{c.last_from_me ? 'You: ' : ''}{c.last_body}</p>
+              </div>
+              {c.unread_count > 0 && (
+                <span className="min-w-[16px] h-4 px-1 bg-amber-400 text-zinc-950 text-[9px] font-bold font-mono rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                  {c.unread_count}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Thread */}
         <div className="md:col-span-3">
-          {selected ? (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  {tab === 'inbox'
-                    ? <Avatar username={selected.sender_username} display_name={selected.sender_display_name} avatar_url={selected.sender_avatar_url} size={10} />
-                    : <Avatar username={selected.recipient_username} display_name={selected.recipient_display_name} avatar_url={null} size={10} />}
-                  <div>
-                    <Link href={`/u/${tab === 'inbox' ? selected.sender_username : selected.recipient_username}`}
-                      className="text-sm font-mono font-bold text-zinc-100 hover:text-amber-400 transition-colors">
-                      @{tab === 'inbox' ? selected.sender_username : selected.recipient_username}
-                    </Link>
-                    {selected.calc_make && (
-                      <p className="text-[10px] font-mono text-amber-600">re: {selected.calc_make} {selected.calc_model}</p>
-                    )}
-                    <p className="text-[10px] font-mono text-zinc-600">{new Date(selected.created_at).toLocaleString()}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {tab === 'inbox' && (
-                    <button
-                      onClick={() => {
-                        setComposeTo(selected.sender_username);
-                        setComposeBody('');
-                        setShowCompose(true);
-                      }}
-                      className="text-xs font-mono text-zinc-500 hover:text-amber-400 border border-zinc-700 hover:border-amber-500/50 px-2.5 py-1 rounded-lg transition-colors">
-                      ↩ Reply
-                    </button>
-                  )}
-                  <button onClick={() => del(selected)}
-                    className="text-xs font-mono text-zinc-600 hover:text-red-400 border border-zinc-800 hover:border-red-900/50 px-2.5 py-1 rounded-lg transition-colors">
-                    🗑
-                  </button>
-                </div>
+          {activeUsername ? (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col h-[32rem]">
+              <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+                <Link href={`/u/${activeUsername}`} className="flex items-center gap-3 hover:text-amber-400 transition-colors">
+                  <Avatar username={activeUsername} display_name={active?.display_name ?? null} avatar_url={active?.avatar_url ?? null} size={9} />
+                  <span className="text-sm font-mono font-bold text-zinc-100">@{activeUsername}</span>
+                </Link>
               </div>
-              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{selected.body}</p>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {threadLoading ? (
+                  <div className="text-zinc-600 font-mono text-xs text-center py-8">Loading…</div>
+                ) : thread.length === 0 ? (
+                  <div className="text-zinc-600 font-mono text-xs text-center py-8">No messages yet — say hi!</div>
+                ) : thread.map(m => {
+                  const mine = m.sender_id === user.id;
+                  return (
+                    <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[75%] rounded-2xl px-3.5 py-2 ${mine ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-zinc-200'}`}>
+                        {m.calc_make && (
+                          <p className={`text-[10px] font-mono mb-0.5 ${mine ? 'text-zinc-800/70' : 'text-amber-500'}`}>
+                            re: {m.calc_make} {m.calc_model}
+                          </p>
+                        )}
+                        <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
+                        <p className={`text-[9px] font-mono mt-1 ${mine ? 'text-zinc-800/60' : 'text-zinc-500'}`}>
+                          {timeAgo(m.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={bottomRef} />
+              </div>
+
+              <div className="p-3 border-t border-zinc-800 flex gap-2">
+                <input
+                  value={replyBody}
+                  onChange={e => setReplyBody(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
+                  placeholder="Type a message…"
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors"
+                />
+                <button onClick={sendReply} disabled={sending || !replyBody.trim()}
+                  className="px-4 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
+                  {sending ? '…' : 'Send'}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center justify-center h-40 text-zinc-700 font-mono text-sm">
-              Select a message to read it
+              Select a conversation
             </div>
           )}
         </div>

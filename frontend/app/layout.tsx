@@ -4,6 +4,7 @@ import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { ThemeProvider } from '@/lib/theme';
 import { Nav } from '@/components/nav';
+import { PushRegistration } from '@/components/push-registration';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -66,6 +67,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100 min-h-screen`}>
         <ThemeProvider>
           <AuthProvider>
+            <PushRegistration />
             <Nav />
             <main>{children}</main>
           </AuthProvider>

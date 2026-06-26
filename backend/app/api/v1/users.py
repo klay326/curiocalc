@@ -8,10 +8,40 @@ from app.api.deps import get_current_user, get_db, get_optional_user
 from app.models.collection import CollectionEntry
 from app.models.follow import Follow
 from app.models.user import User
-from app.schemas.user import UserMe, UserProfile, UserUpdate
+from app.schemas.user import UserMe, UserProfile, UserSearchEntry, UserUpdate
 from app.services.storage import upload_image
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+async def _to_search_entries(db: AsyncSession, rows, me: User | None) -> list[UserSearchEntry]:
+    """rows: list of (User, owned_count) tuples."""
+    user_ids = [u.id for u, _ in rows]
+    following_ids: set = set()
+    if me and user_ids:
+        r = await db.execute(
+            select(Follow.following_id).where(Follow.follower_id == me.id, Follow.following_id.in_(user_ids))
+        )
+        following_ids = {row[0] for row in r.all()}
+
+    follower_counts: dict = {}
+    if user_ids:
+        r = await db.execute(
+            select(Follow.following_id, func.count(Follow.id))
+            .where(Follow.following_id.in_(user_ids))
+            .group_by(Follow.following_id)
+        )
+        follower_counts = dict(r.all())
+
+    return [
+        UserSearchEntry(
+            id=u.id, username=u.username, display_name=u.display_name, bio=u.bio,
+            avatar_url=u.avatar_url, location=u.location, website=u.website, created_at=u.created_at,
+            owned_count=owned_count, follower_count=follower_counts.get(u.id, 0),
+            is_following=u.id in following_ids,
+        )
+        for u, owned_count in rows
+    ]
 
 
 @router.get("/me", response_model=UserMe)
@@ -78,6 +108,53 @@ async def remove_collection_photo(
     await db.commit()
     await db.refresh(current_user)
     return current_user
+
+
+@router.get("/search", response_model=list[UserSearchEntry])
+async def search_users(
+    q: str,
+    db: AsyncSession = Depends(get_db),
+    me: User | None = Depends(get_optional_user),
+):
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    pattern = f"%{q}%"
+    r = await db.execute(
+        select(User, func.count(CollectionEntry.id).filter(CollectionEntry.status == "owned"))
+        .outerjoin(CollectionEntry, CollectionEntry.user_id == User.id)
+        .where(
+            User.is_active.is_(True),
+            (User.username.ilike(pattern)) | (User.display_name.ilike(pattern)),
+        )
+        .group_by(User.id)
+        .order_by(func.count(CollectionEntry.id).filter(CollectionEntry.status == "owned").desc())
+        .limit(20)
+    )
+    rows = [(u, count or 0) for u, count in r.all() if not me or u.id != me.id]
+    return await _to_search_entries(db, rows, me)
+
+
+@router.get("/suggested", response_model=list[UserSearchEntry])
+async def suggested_users(
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(get_current_user),
+    limit: int = 10,
+):
+    """Top collectors by owned count, excluding self and already-followed users."""
+    following_r = await db.execute(select(Follow.following_id).where(Follow.follower_id == me.id))
+    excluded = {row[0] for row in following_r.all()} | {me.id}
+
+    r = await db.execute(
+        select(User, func.count(CollectionEntry.id).filter(CollectionEntry.status == "owned"))
+        .outerjoin(CollectionEntry, CollectionEntry.user_id == User.id)
+        .where(User.is_active.is_(True), User.id.notin_(excluded))
+        .group_by(User.id)
+        .order_by(func.count(CollectionEntry.id).filter(CollectionEntry.status == "owned").desc())
+        .limit(limit)
+    )
+    rows = [(u, count or 0) for u, count in r.all() if count]
+    return await _to_search_entries(db, rows, me)
 
 
 @router.get("/{username}", response_model=UserProfile)

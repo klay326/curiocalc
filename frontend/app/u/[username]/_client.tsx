@@ -242,6 +242,10 @@ export default function UserProfilePage() {
   const [following, setFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -281,6 +285,16 @@ export default function UserProfilePage() {
       }
     } catch (e) { console.error(e); }
     finally { setFollowLoading(false); }
+  };
+
+  const submitReport = async () => {
+    if (!reportReason.trim()) return;
+    setReportSubmitting(true);
+    try {
+      await api.reports.create({ target_type: 'user', reported_username: username, reason: reportReason.trim() });
+      setReportSubmitted(true);
+    } catch (e) { console.error(e); }
+    finally { setReportSubmitting(false); }
   };
 
   const copyWishlistLink = () => {
@@ -347,18 +361,72 @@ export default function UserProfilePage() {
             ⚙ Edit profile
           </Link>
         ) : me && (
-          <button
-            onClick={toggleFollow}
-            disabled={followLoading}
-            className={`text-xs font-mono px-4 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
-              following
-                ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-red-950/40 hover:text-red-400 hover:border-red-900/50'
-                : 'bg-amber-400 text-zinc-950 border-amber-400 hover:bg-amber-300 font-bold'
-            }`}>
-            {followLoading ? '…' : following ? 'Following' : 'Follow'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setShowReport(true); setReportReason(''); setReportSubmitted(false); }}
+              className="text-[10px] font-mono text-zinc-700 hover:text-amber-500 transition-colors"
+              title="Report this user"
+            >
+              ⚠ report
+            </button>
+            <button
+              onClick={toggleFollow}
+              disabled={followLoading}
+              className={`text-xs font-mono px-4 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                following
+                  ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-red-950/40 hover:text-red-400 hover:border-red-900/50'
+                  : 'bg-amber-400 text-zinc-950 border-amber-400 hover:bg-amber-300 font-bold'
+              }`}>
+              {followLoading ? '…' : following ? 'Following' : 'Follow'}
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Report user modal */}
+      {showReport && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowReport(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            {reportSubmitted ? (
+              <div className="text-center py-4">
+                <div className="text-3xl mb-2">✓</div>
+                <p className="text-zinc-300 font-mono text-sm">Report submitted. Thanks for flagging this.</p>
+                <button onClick={() => setShowReport(false)}
+                  className="mt-4 px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors border border-zinc-700">
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <h3 className="font-mono font-bold text-zinc-100 text-sm mb-1">Report @{username}</h3>
+                <p className="text-zinc-500 font-mono text-xs mb-3">Tell us what's wrong — an admin will review.</p>
+                <textarea
+                  value={reportReason}
+                  onChange={e => setReportReason(e.target.value)}
+                  placeholder="Reason for reporting…"
+                  rows={3}
+                  maxLength={500}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 font-mono text-xs focus:outline-none focus:border-amber-400 transition-colors resize-none mb-3"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowReport(false)}
+                    className="px-3 py-1.5 font-mono text-xs text-zinc-400 hover:text-zinc-200 transition-colors">
+                    cancel
+                  </button>
+                  <button
+                    onClick={submitReport}
+                    disabled={reportSubmitting || !reportReason.trim()}
+                    className="px-4 py-1.5 bg-red-600 text-white rounded-lg font-mono text-xs font-bold hover:bg-red-500 transition-colors disabled:opacity-40">
+                    {reportSubmitting ? 'Submitting…' : 'Submit report'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Profile header */}
       <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center mb-6">

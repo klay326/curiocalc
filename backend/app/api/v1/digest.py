@@ -122,6 +122,8 @@ async def send_all_digests(
 
     sent = 0
     for user in users:
+        if not user.notification_prefs.get("email_digest", True):
+            continue
         data = await _build_digest_for(user, db)
         if not data:
             continue
@@ -165,6 +167,8 @@ async def send_all_digests_cron(
 
     sent = 0
     for user in users:
+        if not user.notification_prefs.get("email_digest", True):
+            continue
         data = await _build_digest_for(user, db)
         if not data:
             continue

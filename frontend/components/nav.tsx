@@ -365,6 +365,7 @@ export function Nav() {
   const moreLinks = [
     { href: '/timeline', label: 'Timeline' },
     { href: '/top', label: 'Top collectors' },
+    { href: '/collectors', label: 'Discover collectors' },
     { href: '/compare', label: 'Compare' },
     { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },
@@ -376,6 +377,7 @@ export function Nav() {
     { href: '/trending', label: 'Trending' },
     { href: '/timeline', label: 'Timeline' },
     { href: '/top', label: 'Top collectors' },
+    { href: '/collectors', label: 'Discover collectors' },
     { href: '/compare', label: 'Compare calcs' },
     { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },

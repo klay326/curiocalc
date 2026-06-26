@@ -130,7 +130,7 @@ export default function RegisterPage() {
     try {
       await api.auth.register({ ...form, theme: selectedTheme });
       await login(form.email, form.password);
-      router.push('/collection');
+      router.push('/welcome');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

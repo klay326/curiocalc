@@ -20,6 +20,8 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({});
+  const [notifSaved, setNotifSaved] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -32,6 +34,7 @@ export default function SettingsPage() {
       setWebsite(user.website ?? '');
       setAvatarUrl(user.avatar_url ?? '');
       setApiKey(user.api_key ?? null);
+      setNotifPrefs(user.notification_prefs ?? {});
       setShowcaseIds(user.showcase_ids ?? []);
       setLoadingShowcase(true);
       api.collection.mine().then(async (entries) => {
@@ -66,6 +69,18 @@ export default function SettingsPage() {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSavingShowcase(false);
+    }
+  };
+
+  const toggleNotifPref = async (key: string) => {
+    const next = { ...notifPrefs, [key]: notifPrefs[key] === false };
+    setNotifPrefs(next);
+    try {
+      await api.users.updateMe({ notification_prefs: next });
+      setNotifSaved(true);
+      setTimeout(() => setNotifSaved(false), 2000);
+    } catch {
+      setNotifPrefs(notifPrefs); // revert on failure
     }
   };
 
@@ -396,6 +411,35 @@ export default function SettingsPage() {
             </div>
           </>
         )}
+      </div>
+
+      {/* Notification preferences */}
+      <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        <h2 className="text-sm font-bold font-mono text-zinc-300 mb-1">Email notifications</h2>
+        <p className="text-[11px] text-zinc-600 font-mono mb-4">
+          Choose which emails you want to receive. In-app notifications are unaffected.
+        </p>
+        <div className="space-y-3">
+          {[
+            { key: 'email_digest', label: 'Weekly digest', desc: "What people you follow have been up to" },
+            { key: 'email_follow', label: 'New followers', desc: 'When someone follows you' },
+            { key: 'email_comment', label: 'Comments', desc: 'When someone comments on a calculator you own' },
+          ].map(({ key, label, desc }) => (
+            <label key={key} className="flex items-center justify-between gap-3 cursor-pointer">
+              <span>
+                <span className="block text-zinc-300 font-mono text-sm">{label}</span>
+                <span className="block text-zinc-600 font-mono text-[11px]">{desc}</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={notifPrefs[key] !== false}
+                onChange={() => toggleNotifPref(key)}
+                className="w-4 h-4 accent-amber-400 flex-shrink-0"
+              />
+            </label>
+          ))}
+        </div>
+        {notifSaved && <p className="text-green-400 font-mono text-[11px] mt-3">✓ Saved</p>}
       </div>
 
       {/* API Key */}

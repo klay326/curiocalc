@@ -72,6 +72,10 @@
 	<string>CurioCalc may request microphone access when using the camera.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>WKAppBoundDomains</key>
 	<array>
 		<string>curiocalc.org</string>

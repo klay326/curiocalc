@@ -27,6 +27,9 @@ class User(Base):
     collection_photos: Mapped[list] = mapped_column(JSON, default=list, server_default='[]')
     showcase_ids: Mapped[list] = mapped_column(JSON, default=list, server_default='[]')
 
+    # Email notification opt-outs — missing key means enabled (default-on)
+    notification_prefs: Mapped[dict] = mapped_column(JSON, default=dict, server_default='{}')
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission } from '@/lib/api';
+import { api, type Calculator, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission, type Report } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge' | 'import' | 'submissions'>('stats');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge' | 'import' | 'submissions' | 'reports'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
-        {(['stats', 'calcs', 'users', 'submissions', 'suggestions', 'photos', 'merge', 'import'] as const).map(t => (
+        {(['stats', 'calcs', 'users', 'submissions', 'reports', 'suggestions', 'photos', 'merge', 'import'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -52,6 +52,7 @@ export default function AdminPage() {
        : tab === 'photos'     ? <PhotosTab />
        : tab === 'import'     ? <ImportTab />
        : tab === 'submissions' ? <SubmissionsTab />
+       : tab === 'reports'    ? <ReportsTab />
        : <SuggestionsTab />}
     </div>
   );
@@ -1061,6 +1062,91 @@ function PhotosTab() {
                   <p className="text-[10px] text-zinc-500 font-mono italic">"{s.reviewer_note}"</p>
                 )}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ────────────────────────────────── Reports tab ── */
+function ReportsTab() {
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'pending' | 'resolved' | 'dismissed'>('pending');
+  const [acting, setActing] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setReports(await api.reports.list(filter)); }
+    finally { setLoading(false); }
+  }, [filter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (id: string, action: 'dismiss' | 'remove_content') => {
+    setActing(id);
+    try {
+      await api.reports.resolve(id, action);
+      setReports(prev => prev.filter(r => r.id !== id));
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+    finally { setActing(null); }
+  };
+
+  return (
+    <>
+      <div className="flex gap-2 mb-6">
+        {(['pending', 'resolved', 'dismissed'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors capitalize ${
+              filter === f
+                ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold'
+                : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+            }`}>
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="text-zinc-600 font-mono text-sm animate-pulse">Loading…</div>
+      ) : reports.length === 0 ? (
+        <div className="text-center py-16 text-zinc-600 font-mono text-sm">
+          <div className="text-4xl mb-3">🚩</div>
+          No {filter} reports.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reports.map(r => (
+            <div key={r.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <p className="text-xs font-mono text-zinc-400">
+                    Reported by <span className="text-zinc-200">@{r.reporter_username}</span>
+                    {' '}· {r.target_type === 'comment' ? 'comment' : `user @${r.reported_username}`}
+                  </p>
+                  <p className="text-[10px] text-zinc-600 font-mono mt-0.5">{new Date(r.created_at).toLocaleString()}</p>
+                </div>
+              </div>
+              {r.comment_content && (
+                <p className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 font-mono text-xs mb-2 whitespace-pre-line">
+                  {r.comment_content}
+                </p>
+              )}
+              <p className="text-zinc-400 font-mono text-xs mb-3"><span className="text-zinc-600">Reason: </span>{r.reason}</p>
+              {filter === 'pending' && (
+                <div className="flex gap-2">
+                  <button onClick={() => act(r.id, 'remove_content')} disabled={acting === r.id}
+                    className="px-3 py-1.5 bg-red-900/20 text-red-400 border border-red-900/30 rounded-lg font-mono text-xs font-bold hover:bg-red-900/30 transition-colors disabled:opacity-50">
+                    {acting === r.id ? '…' : r.target_type === 'comment' ? '🗑 remove comment' : '🚫 deactivate user'}
+                  </button>
+                  <button onClick={() => act(r.id, 'dismiss')} disabled={acting === r.id}
+                    className="px-3 py-1.5 bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-lg font-mono text-xs hover:bg-zinc-700 transition-colors disabled:opacity-50">
+                    dismiss
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

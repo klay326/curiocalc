@@ -11,6 +11,7 @@ from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.user import UserPublic
 from app.services.email import send_follow_email
+from app.services.push import send_push_to_user
 
 router = APIRouter(tags=["follows"])
 
@@ -44,7 +45,10 @@ async def follow_user(
         actor_avatar_url=me.avatar_url,
     ))
     await db.commit()
-    await send_follow_email(target.email, me.username, me.display_name)
+    if target.notification_prefs.get("email_follow", True):
+        await send_follow_email(target.email, me.username, me.display_name)
+    name = me.display_name or f"@{me.username}"
+    await send_push_to_user(target.id, db, "New follower", f"{name} started following you on CurioCalc")
 
 
 @router.delete("/users/{username}/follow", status_code=status.HTTP_204_NO_CONTENT)

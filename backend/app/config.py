@@ -52,5 +52,12 @@ class Settings(BaseSettings):
     # Digest cron secret (for the /digest/send-all-cron endpoint)
     DIGEST_SECRET: str = ""
 
+    # Apple Push Notifications — leave blank to disable push sending
+    APNS_KEY_ID: str = ""
+    APNS_TEAM_ID: str = ""
+    APNS_AUTH_KEY: str = ""  # contents of the .p8 key file
+    APNS_TOPIC: str = "org.curiocalc.app"
+    APNS_USE_SANDBOX: bool = False
+
 
 settings = Settings()

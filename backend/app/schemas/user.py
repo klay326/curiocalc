@@ -26,6 +26,7 @@ class UserUpdate(BaseModel):
     avatar_url: str | None = None
     theme: str | None = None
     showcase_ids: list[str] | None = None
+    notification_prefs: dict[str, bool] | None = None
 
 
 class UserPublic(BaseModel):
@@ -49,6 +50,7 @@ class UserMe(UserPublic):
     theme: str = 'obsidian'
     collection_photos: list[str] = []
     showcase_ids: list[str] = []
+    notification_prefs: dict[str, bool] = {}
 
 
 class UserAdminUpdate(BaseModel):
@@ -73,3 +75,9 @@ class UserProfile(UserPublic):
     is_following: bool = False
     collection_photos: list[str] = []
     showcase_ids: list[str] = []
+
+
+class UserSearchEntry(UserPublic):
+    owned_count: int = 0
+    follower_count: int = 0
+    is_following: bool = False

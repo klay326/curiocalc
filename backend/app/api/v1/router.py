@@ -6,10 +6,12 @@ from app.api.v1 import (
     calculators,
     collections,
     comments,
+    devices,
     digest,
     follows,
     messages,
     notifications,
+    reports,
     stats,
     suggestions,
     trade_offers,
@@ -31,3 +33,5 @@ api_router.include_router(notifications.router)
 api_router.include_router(messages.router)
 api_router.include_router(trade_offers.router)
 api_router.include_router(digest.router)
+api_router.include_router(reports.router)
+api_router.include_router(devices.router)

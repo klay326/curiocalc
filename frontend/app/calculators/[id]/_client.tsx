@@ -1388,6 +1388,10 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
   const [editContent, setEditContent] = useState('');
   const [editRating, setEditRating] = useState(0);
   const [editSaving, setEditSaving] = useState(false);
+  const [reportingId, setReportingId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api.comments.list(calcId)
@@ -1440,6 +1444,22 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
       await api.comments.delete(commentId);
       setComments(prev => prev.filter(c => c.id !== commentId));
     } catch {}
+  };
+
+  const handleSubmitReport = async (commentId: string) => {
+    if (!reportReason.trim()) return;
+    setReportSubmitting(true);
+    try {
+      await api.reports.create({
+        target_type: 'comment',
+        comment_id: commentId,
+        reason: reportReason.trim(),
+      });
+      setReportedIds(prev => new Set(prev).add(commentId));
+      setReportingId(null);
+      setReportReason('');
+    } catch {}
+    finally { setReportSubmitting(false); }
   };
 
   const avgRating = comments.filter(c => c.rating).length > 0
@@ -1548,7 +1568,47 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
                     delete
                   </button>
                 )}
+                {currentUser && currentUser.id !== c.user_id && editingId !== c.id && reportingId !== c.id && (
+                  reportedIds.has(c.id) ? (
+                    <span className="text-[10px] font-mono text-zinc-700">reported</span>
+                  ) : (
+                    <button
+                      onClick={() => { setReportingId(c.id); setReportReason(''); }}
+                      className="text-[10px] font-mono text-zinc-700 hover:text-amber-500 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      report
+                    </button>
+                  )
+                )}
               </div>
+              {reportingId === c.id && (
+                <div className="mb-2 bg-zinc-950 border border-zinc-800 rounded-lg p-3 space-y-2">
+                  <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Report this comment</p>
+                  <textarea
+                    value={reportReason}
+                    onChange={e => setReportReason(e.target.value)}
+                    placeholder="Why are you reporting this?"
+                    rows={2}
+                    maxLength={500}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 font-mono text-xs focus:outline-none focus:border-amber-400 transition-colors resize-none"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setReportingId(null)}
+                      className="px-3 py-1 font-mono text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                      cancel
+                    </button>
+                    <button
+                      onClick={() => handleSubmitReport(c.id)}
+                      disabled={reportSubmitting || !reportReason.trim()}
+                      className="px-3 py-1 bg-red-600 text-white rounded-lg font-mono text-xs font-bold hover:bg-red-500 transition-colors disabled:opacity-40"
+                    >
+                      {reportSubmitting ? 'Submitting…' : 'Submit report'}
+                    </button>
+                  </div>
+                </div>
+              )}
               {editingId === c.id ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 mb-1">

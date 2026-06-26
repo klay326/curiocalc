@@ -47,6 +47,7 @@ export type AuthUser = {
   theme: string;
   collection_photos: string[];
   showcase_ids: string[];
+  notification_prefs: Record<string, boolean>;
 };
 
 export type AdminUser = {
@@ -76,6 +77,20 @@ export type UserProfile = {
   is_following: boolean;
   collection_photos: string[];
   showcase_ids: string[];
+};
+
+export type UserSearchEntry = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  location: string | null;
+  website: string | null;
+  created_at: string;
+  owned_count: number;
+  follower_count: number;
+  is_following: boolean;
 };
 
 export type TradeMatch = {
@@ -279,6 +294,18 @@ export type TradeOffer = {
   created_at: string;
 };
 
+export type Report = {
+  id: string;
+  target_type: 'comment' | 'user';
+  reporter_username: string;
+  comment_id: string | null;
+  comment_content: string | null;
+  reported_username: string | null;
+  reason: string;
+  status: 'pending' | 'resolved' | 'dismissed';
+  created_at: string;
+};
+
 export type Message = {
   id: string;
   sender_id: string;
@@ -294,6 +321,16 @@ export type Message = {
   body: string;
   read: boolean;
   created_at: string;
+};
+
+export type Conversation = {
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  last_body: string;
+  last_created_at: string;
+  last_from_me: boolean;
+  unread_count: number;
 };
 
 export type EditSuggestion = {
@@ -501,8 +538,11 @@ export const api = {
       avatar_url?: string | null;
       theme?: string | null;
       showcase_ids?: string[];
+      notification_prefs?: Record<string, boolean>;
     }) => request<AuthUser>('/api/v1/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
     leaderboard: () => request<LeaderboardEntry[]>('/api/v1/users/leaderboard'),
+    search: (q: string) => request<UserSearchEntry[]>(`/api/v1/users/search?q=${encodeURIComponent(q)}`),
+    suggested: (limit?: number) => request<UserSearchEntry[]>(`/api/v1/users/suggested${limit ? `?limit=${limit}` : ''}`),
     follow: (username: string) =>
       request<void>(`/api/v1/users/${username}/follow`, { method: 'POST' }),
     unfollow: (username: string) =>
@@ -636,6 +676,22 @@ export const api = {
     sendMe: () => request<{ sent: boolean; reason?: string }>('/api/v1/digest/send-me', { method: 'POST' }),
   },
 
+  devices: {
+    register: (data: { token: string; platform?: string }) =>
+      request<void>('/api/v1/devices/register', { method: 'POST', body: JSON.stringify(data) }),
+    unregister: (token: string) =>
+      request<void>(`/api/v1/devices/${token}`, { method: 'DELETE' }),
+  },
+
+  reports: {
+    create: (data: { target_type: 'comment' | 'user'; comment_id?: string; reported_username?: string; reason: string }) =>
+      request<Report>('/api/v1/reports', { method: 'POST', body: JSON.stringify(data) }),
+    list: (status?: 'pending' | 'resolved' | 'dismissed') =>
+      request<Report[]>(`/api/v1/reports${status ? `?status_filter=${status}` : ''}`),
+    resolve: (id: string, action: 'dismiss' | 'remove_content') =>
+      request<{ status: string }>(`/api/v1/reports/${id}`, { method: 'PATCH', body: JSON.stringify({ action }) }),
+  },
+
   messages: {
     send: (data: { recipient_username: string; body: string; calc_id?: string }) =>
       request<Message>('/api/v1/messages', { method: 'POST', body: JSON.stringify(data) }),
@@ -644,6 +700,8 @@ export const api = {
     unreadCount: () => request<{ count: number }>('/api/v1/messages/unread-count'),
     markRead: (id: string) => request<void>(`/api/v1/messages/${id}/read`, { method: 'PATCH' }),
     delete: (id: string) => request<void>(`/api/v1/messages/${id}`, { method: 'DELETE' }),
+    conversations: () => request<Conversation[]>('/api/v1/messages/conversations'),
+    thread: (username: string) => request<Message[]>(`/api/v1/messages/thread/${username}`),
   },
 
   suggestions: {

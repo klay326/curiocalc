@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
@@ -91,6 +91,91 @@ async def send_message(
     await db.commit()
     await db.refresh(msg)
     return _serialize(msg, me, recipient)
+
+
+@router.get("/conversations")
+async def list_conversations(
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    """Group all messages by the other participant — one row per conversation."""
+    r = await db.execute(
+        select(Message).where(
+            or_(Message.sender_id == me.id, Message.recipient_id == me.id),
+        ).order_by(Message.created_at.desc())
+    )
+    messages = r.scalars().all()
+    messages = [
+        m for m in messages
+        if not ((m.sender_id == me.id and m.deleted_by_sender) or (m.recipient_id == me.id and m.deleted_by_recipient))
+    ]
+
+    other_ids: set[uuid.UUID] = set()
+    for m in messages:
+        other_ids.add(m.recipient_id if m.sender_id == me.id else m.sender_id)
+
+    if not other_ids:
+        return []
+
+    users_r = await db.execute(select(User).where(User.id.in_(other_ids)))
+    users_by_id = {u.id: u for u in users_r.scalars().all()}
+
+    conversations: dict[uuid.UUID, dict] = {}
+    for m in messages:
+        other_id = m.recipient_id if m.sender_id == me.id else m.sender_id
+        other = users_by_id.get(other_id)
+        if not other:
+            continue
+        if other_id not in conversations:
+            conversations[other_id] = {
+                "username": other.username,
+                "display_name": other.display_name,
+                "avatar_url": other.avatar_url,
+                "last_body": m.body,
+                "last_created_at": m.created_at.isoformat(),
+                "last_from_me": m.sender_id == me.id,
+                "unread_count": 0,
+            }
+        if m.recipient_id == me.id and not m.read:
+            conversations[other_id]["unread_count"] += 1
+
+    return sorted(conversations.values(), key=lambda c: c["last_created_at"], reverse=True)
+
+
+@router.get("/thread/{username}")
+async def get_thread(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    """Full chronological message history with one other user; marks their messages as read."""
+    other_r = await db.execute(select(User).where(User.username == username))
+    other = other_r.scalar_one_or_none()
+    if not other:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    r = await db.execute(
+        select(Message).where(
+            or_(
+                (Message.sender_id == me.id) & (Message.recipient_id == other.id),
+                (Message.sender_id == other.id) & (Message.recipient_id == me.id),
+            )
+        ).order_by(Message.created_at.asc())
+    )
+    messages = r.scalars().all()
+    messages = [
+        m for m in messages
+        if not ((m.sender_id == me.id and m.deleted_by_sender) or (m.recipient_id == me.id and m.deleted_by_recipient))
+    ]
+
+    unread_ids = [m.id for m in messages if m.recipient_id == me.id and not m.read]
+    if unread_ids:
+        for m in messages:
+            if m.id in unread_ids:
+                m.read = True
+        await db.commit()
+
+    return [_serialize(m, me if m.sender_id == me.id else other, other if m.sender_id == me.id else me) for m in messages]
 
 
 @router.get("/inbox")
