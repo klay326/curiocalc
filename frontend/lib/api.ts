@@ -25,6 +25,7 @@ export type Calculator = {
   owner_count: number;
   want_count: number;
   variant_count: number;
+  like_count: number;
   parent_id: string | null;
   variant_label: string | null;
   created_at: string;
@@ -412,7 +413,10 @@ export const api = {
       calc_type?: string;
       make?: string;
       tag?: string;
+      tags?: string[];
       decade?: number;
+      year_from?: number;
+      year_to?: number;
       min_rarity?: number;
       max_rarity?: number;
       display_type?: string;
@@ -427,7 +431,10 @@ export const api = {
       if (params?.calc_type) query.set('calc_type', params.calc_type);
       if (params?.make) query.set('make', params.make);
       if (params?.tag) query.set('tag', params.tag);
+      if (params?.tags) params.tags.forEach(t => query.append('tags', t));
       if (params?.decade != null) query.set('decade', String(params.decade));
+      if (params?.year_from != null) query.set('year_from', String(params.year_from));
+      if (params?.year_to != null) query.set('year_to', String(params.year_to));
       if (params?.min_rarity != null) query.set('min_rarity', String(params.min_rarity));
       if (params?.max_rarity != null) query.set('max_rarity', String(params.max_rarity));
       if (params?.display_type) query.set('display_type', params.display_type);
@@ -461,6 +468,9 @@ export const api = {
       request<Calculator>(`/api/v1/calculators/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<void>(`/api/v1/calculators/${id}`, { method: 'DELETE' }),
+    liked: (id: string) => request<{ liked: boolean; count: number }>(`/api/v1/calculators/${id}/liked`),
+    like: (id: string) => request<void>(`/api/v1/calculators/${id}/like`, { method: 'POST' }),
+    unlike: (id: string) => request<void>(`/api/v1/calculators/${id}/like`, { method: 'DELETE' }),
     submitImage: async (id: string, file: File): Promise<void> => {
       const token = getToken();
       const form = new FormData();

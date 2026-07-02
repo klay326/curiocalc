@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.cache import rate_limit_check
 from app.models.calculator import Calculator
 from app.models.message import Message
 from app.models.user import User
@@ -63,6 +64,9 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
     me: User = Depends(get_current_user),
 ):
+    if not await rate_limit_check(f"rl:message:{me.id}", max_requests=30, window=300):
+        raise HTTPException(status_code=429, detail="Too many messages. Please slow down.")
+
     recipient_r = await db.execute(select(User).where(User.username == payload.recipient_username))
     recipient = recipient_r.scalar_one_or_none()
     if not recipient:

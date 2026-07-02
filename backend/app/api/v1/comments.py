@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.cache import rate_limit_check
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.comment import Comment
@@ -54,6 +55,9 @@ async def create_comment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if not await rate_limit_check(f"rl:comment:{current_user.id}", max_requests=10, window=300):
+        raise HTTPException(status_code=429, detail="Too many comments. Please slow down.")
+
     comment = Comment(
         calculator_id=calc_id,
         user_id=current_user.id,

@@ -75,6 +75,67 @@ function ForSaleForm({
   );
 }
 
+async function exportPDF(entries: EntryWithCalc[], username: string) {
+  const { jsPDF } = await import('jspdf');
+  const owned = entries.filter(e => e.status === 'owned');
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(16);
+  doc.text('CurioCalc', 15, 18);
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(120, 120, 120);
+  doc.text(`@${username} · inventory report · ${new Date().toLocaleDateString()}`, 15, 25);
+  doc.setTextColor(0, 0, 0);
+
+  const cols = ['Make', 'Model', 'Year', 'Condition', 'Price Paid'];
+  const colX = [15, 55, 110, 135, 165];
+  let y = 36;
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(8);
+  doc.setFillColor(245, 245, 245);
+  doc.rect(15, y - 4, pageW - 30, 7, 'F');
+  cols.forEach((c, i) => doc.text(c, colX[i], y));
+  y += 6;
+
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(8);
+  let totalValue = 0;
+
+  for (const e of owned) {
+    if (y > 270) {
+      doc.addPage();
+      y = 20;
+    }
+    const price = e.acquired_price != null ? `$${e.acquired_price.toFixed(2)}` : '';
+    if (e.acquired_price) totalValue += e.acquired_price;
+    const row = [
+      (e.calculator?.make ?? '').slice(0, 18),
+      (e.calculator?.model ?? e.calculator_id).slice(0, 22),
+      e.calculator?.year_introduced ? String(e.calculator.year_introduced) : '',
+      e.condition ?? '',
+      price,
+    ];
+    row.forEach((v, i) => doc.text(v, colX[i], y));
+    y += 5.5;
+    doc.setDrawColor(230, 230, 230);
+    doc.line(15, y - 2, pageW - 15, y - 2);
+  }
+
+  y += 4;
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(9);
+  doc.text(`${owned.length} calculators`, 15, y);
+  if (totalValue > 0) {
+    doc.text(`Total paid: $${totalValue.toFixed(2)}`, colX[4], y);
+  }
+
+  doc.save(`curiocalc-${username}-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 function exportCSV(entries: EntryWithCalc[], username: string) {
   const headers = ['Make', 'Model', 'Status', 'Condition', 'Notes', 'Acquired From', 'Price Paid', 'Date Added', 'Year Introduced'];
   const rows = entries.map(e => [
@@ -737,6 +798,13 @@ export default function CollectionPage() {
             className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors disabled:opacity-30 flex items-center gap-1.5"
           >
             ⬇ Export CSV
+          </button>
+          <button
+            onClick={() => exportPDF(entries, user.username)}
+            disabled={entries.filter(e => e.status === 'owned').length === 0}
+            className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors disabled:opacity-30 flex items-center gap-1.5"
+          >
+            📄 Export PDF
           </button>
         </div>
       </div>

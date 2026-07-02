@@ -33,7 +33,7 @@ export default function WelcomePage() {
     const willFollow = !followedIds.has(entry.id);
     setFollowedIds(prev => {
       const next = new Set(prev);
-      willFollow ? next.add(entry.id) : next.delete(entry.id);
+      if (willFollow) next.add(entry.id); else next.delete(entry.id);
       return next;
     });
     try {

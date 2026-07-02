@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_staff, get_current_superuser, get_current_user, get_db
 from app.cache import cache_del, cache_get, cache_get_int, cache_incr, cache_set
 from app.models.calculator import Calculator
+from app.models.calculator_like import CalculatorLike
 from app.models.collection import CollectionEntry
 from app.models.image_submission import ImageSubmission
 from app.models.user import User
@@ -42,10 +43,14 @@ async def _with_counts(db: AsyncSession, calc: Calculator) -> CalculatorPublic:
     variant_r = await db.execute(
         select(func.count(Calculator.id)).where(Calculator.parent_id == calc.id)
     )
+    like_r = await db.execute(
+        select(func.count(CalculatorLike.id)).where(CalculatorLike.calculator_id == calc.id)
+    )
     d = {c.key: getattr(calc, c.key) for c in calc.__table__.columns}
     d["owner_count"] = owner_r.scalar() or 0
     d["want_count"] = want_r.scalar() or 0
     d["variant_count"] = variant_r.scalar() or 0
+    d["like_count"] = like_r.scalar() or 0
 
     # If base has no images, inherit from the first variant that has images
     if not d["images"] and d["variant_count"] > 0:
@@ -69,7 +74,10 @@ async def list_calculators(
     calc_type: str | None = None,
     make: str | None = None,
     tag: str | None = None,
+    tags: list[str] | None = Query(None, description="Filter by multiple tags — calculator must have ALL of them"),
     decade: int | None = Query(None, description="Filter by decade, e.g. 1970"),
+    year_from: int | None = Query(None, description="Minimum year introduced"),
+    year_to: int | None = Query(None, description="Maximum year introduced"),
     min_rarity: int | None = Query(None, description="Minimum rarity score (1-10)"),
     max_rarity: int | None = Query(None, description="Maximum rarity score (1-10)"),
     display_type: str | None = Query(None, description="Filter by display technology, e.g. LED"),
@@ -83,7 +91,8 @@ async def list_calculators(
     cache_key: str | None = None
     if not q:
         version = await cache_get_int("calcs:v")
-        params_sig = f"{version}|{calc_type}|{make}|{tag}|{decade}|{min_rarity}|{max_rarity}|{display_type}|{sort}|{order}|{include_variants}|{skip}|{limit}"
+        tags_sig = ",".join(sorted(tags)) if tags else ""
+        params_sig = f"{version}|{calc_type}|{make}|{tag}|{tags_sig}|{decade}|{year_from}|{year_to}|{min_rarity}|{max_rarity}|{display_type}|{sort}|{order}|{include_variants}|{skip}|{limit}"
         cache_key = "calcs:list:" + hashlib.md5(params_sig.encode()).hexdigest()
         hit = await cache_get(cache_key)
         if hit is not None:
@@ -115,6 +124,13 @@ async def list_calculators(
         )
     if tag:
         stmt = stmt.where(Calculator.tags.contains([tag]))
+    if tags:
+        for t in tags:
+            stmt = stmt.where(Calculator.tags.contains([t]))
+    if year_from is not None:
+        stmt = stmt.where(Calculator.year_introduced >= year_from)
+    if year_to is not None:
+        stmt = stmt.where(Calculator.year_introduced <= year_to)
     if min_rarity is not None:
         stmt = stmt.where(Calculator.rarity_score >= min_rarity)
     if max_rarity is not None:
@@ -656,6 +672,61 @@ async def upload_calculator_image(
     await db.commit()
     await db.refresh(calc)
     return await _with_counts(db, calc)
+
+
+@router.get("/{calc_id}/liked")
+async def get_liked(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    liked_r = await db.execute(
+        select(CalculatorLike).where(
+            CalculatorLike.user_id == current_user.id,
+            CalculatorLike.calculator_id == calc_id,
+        )
+    )
+    liked = liked_r.scalar_one_or_none() is not None
+    count_r = await db.execute(
+        select(func.count(CalculatorLike.id)).where(CalculatorLike.calculator_id == calc_id)
+    )
+    return {"liked": liked, "count": count_r.scalar() or 0}
+
+
+@router.post("/{calc_id}/like", status_code=status.HTTP_204_NO_CONTENT)
+async def like_calculator(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    existing = await db.execute(
+        select(CalculatorLike).where(
+            CalculatorLike.user_id == current_user.id,
+            CalculatorLike.calculator_id == calc_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return
+    db.add(CalculatorLike(user_id=current_user.id, calculator_id=calc_id))
+    await db.commit()
+
+
+@router.delete("/{calc_id}/like", status_code=status.HTTP_204_NO_CONTENT)
+async def unlike_calculator(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    existing = await db.execute(
+        select(CalculatorLike).where(
+            CalculatorLike.user_id == current_user.id,
+            CalculatorLike.calculator_id == calc_id,
+        )
+    )
+    like = existing.scalar_one_or_none()
+    if like:
+        await db.delete(like)
+        await db.commit()
 
 
 @router.post("/{calc_id}/submit-image", status_code=204)

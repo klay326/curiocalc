@@ -38,16 +38,22 @@ export default function HomePage() {
   const [selectedMake, setSelectedMake]   = useState<string | null>(null);
   const [minRarity, setMinRarity]     = useState<number | null>(null);
   const [selectedDisplay, setSelectedDisplay] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [yearFrom, setYearFrom] = useState<number | null>(null);
+  const [yearTo, setYearTo]     = useState<number | null>(null);
   const [sort, setSort]               = useState('make');
 
   const [makes, setMakes]     = useState<string[]>([]);
   const [showMakes, setShowMakes] = useState(false);
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [showTags, setShowTags] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const makesRef = useRef<HTMLDivElement>(null);
+  const tagsRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const isFiltered = !!(query || selectedType || selectedDecade || selectedMake);
+  const isFiltered = !!(query || selectedType || selectedDecade || selectedMake || selectedTags.length > 0 || yearFrom != null || yearTo != null);
 
   // Press "/" anywhere to focus the search box
   useEffect(() => {
@@ -64,6 +70,7 @@ export default function HomePage() {
   // Load static data once
   useEffect(() => {
     api.calculators.makes().then(setMakes).catch(() => {});
+    api.calculators.tags().then(setAllTags).catch(() => {});
     api.stats.get().then(setStats).catch(() => {});
     api.calculators.daily()
       .then(setFeatured)
@@ -83,6 +90,7 @@ export default function HomePage() {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (makesRef.current && !makesRef.current.contains(e.target as Node)) setShowMakes(false);
+      if (tagsRef.current && !tagsRef.current.contains(e.target as Node)) setShowTags(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -95,14 +103,17 @@ export default function HomePage() {
     q: query || undefined,
     calc_type: selectedType || undefined,
     make: selectedMake || undefined,
+    tags: selectedTags.length > 0 ? selectedTags : undefined,
     decade: selectedDecade ?? undefined,
+    year_from: yearFrom ?? undefined,
+    year_to: yearTo ?? undefined,
     min_rarity: minRarity ?? undefined,
     display_type: selectedDisplay || undefined,
     sort: sortKey,
     order: sortOrder,
     skip: sk,
     limit: PAGE_SIZE,
-  }), [query, selectedType, selectedMake, selectedDecade, minRarity, selectedDisplay, sortKey, sortOrder]);
+  }), [query, selectedType, selectedMake, selectedTags, selectedDecade, yearFrom, yearTo, minRarity, selectedDisplay, sortKey, sortOrder]);
 
   const load = useCallback(async (reset: boolean) => {
     const sk = reset ? 0 : skip;
@@ -119,7 +130,7 @@ export default function HomePage() {
   useEffect(() => {
     setSkip(0); setCalculators([]); setHasMore(true); load(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selectedType, selectedMake, selectedDecade, minRarity, selectedDisplay, sort]);
+  }, [query, selectedType, selectedMake, selectedTags, selectedDecade, yearFrom, yearTo, minRarity, selectedDisplay, sort]);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(inputVal), 300);
@@ -151,7 +162,7 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loading, load]);
 
-  const activeFilterCount = [selectedType, selectedDecade, selectedMake, minRarity != null ? 1 : null, selectedDisplay].filter(Boolean).length;
+  const activeFilterCount = [selectedType, selectedDecade, selectedMake, minRarity != null ? 1 : null, selectedDisplay, ...selectedTags, yearFrom != null ? 1 : null, yearTo != null ? 1 : null].filter(Boolean).length;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-4 sm:py-8">
@@ -374,9 +385,21 @@ export default function HomePage() {
               <button onClick={() => setSelectedDisplay(null)} className="hover:text-zinc-100 leading-none">✕</button>
             </span>
           )}
+          {selectedTags.map(t => (
+            <span key={t} className="text-xs font-mono px-2.5 py-1 rounded-full bg-zinc-700/50 border border-zinc-600 text-zinc-300 flex items-center gap-1">
+              #{t}
+              <button onClick={() => setSelectedTags(prev => prev.filter(x => x !== t))} className="hover:text-zinc-100 leading-none">✕</button>
+            </span>
+          ))}
+          {(yearFrom != null || yearTo != null) && (
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-zinc-700/50 border border-zinc-600 text-zinc-300 flex items-center gap-1">
+              {yearFrom ?? '…'}–{yearTo ?? '…'}
+              <button onClick={() => { setYearFrom(null); setYearTo(null); }} className="hover:text-zinc-100 leading-none">✕</button>
+            </span>
+          )}
           {activeFilterCount > 0 && (
             <button
-              onClick={() => { setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); setMinRarity(null); setSelectedDisplay(null); }}
+              onClick={() => { setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); setMinRarity(null); setSelectedDisplay(null); setSelectedTags([]); setYearFrom(null); setYearTo(null); }}
               className="text-xs font-mono text-zinc-600 hover:text-red-400 transition-colors ml-auto"
             >
               clear all
@@ -415,6 +438,55 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
+
+            {/* Year range */}
+            <div>
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">Year introduced</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" placeholder="from" value={yearFrom ?? ''}
+                  onChange={e => setYearFrom(e.target.value ? Number(e.target.value) : null)}
+                  className="w-24 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-amber-400 transition-colors"
+                />
+                <span className="text-zinc-600 text-xs">–</span>
+                <input
+                  type="number" placeholder="to" value={yearTo ?? ''}
+                  onChange={e => setYearTo(e.target.value ? Number(e.target.value) : null)}
+                  className="w-24 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-amber-400 transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Tags (multi-select, AND logic) */}
+            {allTags.length > 0 && (
+              <div ref={tagsRef}>
+                <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2">
+                  Tags{selectedTags.length > 0 ? ` (must have all ${selectedTags.length})` : ''}
+                </p>
+                <div className="relative">
+                  <button onClick={() => setShowTags(v => !v)}
+                    className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                      selectedTags.length > 0 ? 'bg-zinc-700 text-zinc-100 border-zinc-500 font-bold' : 'text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
+                    }`}>
+                    {selectedTags.length > 0 ? `${selectedTags.length} selected ▾` : 'Select tags ▾'}
+                  </button>
+                  {showTags && (
+                    <div className="absolute top-full left-0 mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-2 min-w-[180px] max-h-60 overflow-y-auto">
+                      {allTags.map(t => (
+                        <button key={t}
+                          onClick={() => setSelectedTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])}
+                          className={`w-full text-left text-xs px-3 py-1.5 rounded font-mono transition-colors flex items-center gap-2 ${
+                            selectedTags.includes(t) ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+                          }`}>
+                          <span className="w-3 text-amber-400">{selectedTags.includes(t) ? '✓' : ''}</span>
+                          #{t}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Rarity */}
             <div>
@@ -493,7 +565,7 @@ export default function HomePage() {
           <div className="text-5xl mb-4">🧮</div>
           <p className="text-sm">No calculators found.</p>
           {isFiltered && (
-            <button onClick={() => { setInputVal(''); setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); }}
+            <button onClick={() => { setInputVal(''); setSelectedType(null); setSelectedDecade(null); setSelectedMake(null); setSelectedTags([]); setYearFrom(null); setYearTo(null); setMinRarity(null); setSelectedDisplay(null); }}
               className="text-xs text-amber-400 hover:text-amber-300 mt-2">clear all filters</button>
           )}
         </div>

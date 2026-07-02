@@ -98,6 +98,9 @@ export default function CalculatorPage() {
   const [showEmbed, setShowEmbed] = useState(false);
   const [showSubmitPhoto, setShowSubmitPhoto] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [likePending, setLikePending] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -134,6 +137,31 @@ export default function CalculatorPage() {
       })
       .catch(() => {});
   }, [id, user, variants]);
+
+  // Load like status for logged-in user
+  useEffect(() => {
+    if (!user || !id) return;
+    api.calculators.liked(id)
+      .then(r => { setLiked(r.liked); setLikeCount(r.count); })
+      .catch(() => {});
+  }, [id, user]);
+
+  const toggleLike = async () => {
+    if (!user || likePending) return;
+    setLikePending(true);
+    const wasLiked = liked;
+    setLiked(!wasLiked);
+    setLikeCount(c => wasLiked ? Math.max(0, c - 1) : c + 1);
+    try {
+      if (wasLiked) await api.calculators.unlike(id);
+      else await api.calculators.like(id);
+    } catch {
+      setLiked(wasLiked);
+      setLikeCount(c => wasLiked ? c + 1 : Math.max(0, c - 1));
+    } finally {
+      setLikePending(false);
+    }
+  };
 
 
   const removeImageDirect = async (index: number) => {
@@ -409,6 +437,19 @@ export default function CalculatorPage() {
 
           {/* Action links */}
           <div className="flex flex-wrap gap-2">
+            {user && (
+              <button
+                onClick={toggleLike}
+                disabled={likePending}
+                className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-lg border transition-colors ${
+                  liked
+                    ? 'border-red-700/60 text-red-400 bg-red-950/20 hover:bg-red-950/40'
+                    : 'border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                }`}
+              >
+                {liked ? '♥' : '♡'} {likeCount > 0 ? likeCount : ''}
+              </button>
+            )}
             <a href={wikiUrl} target="_blank" rel="noopener noreferrer"
               className="text-xs font-mono text-zinc-500 hover:text-zinc-300 border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-colors">
               Wikipedia ↗

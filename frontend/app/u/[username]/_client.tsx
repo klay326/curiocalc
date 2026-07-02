@@ -401,7 +401,7 @@ export default function UserProfilePage() {
             ) : (
               <>
                 <h3 className="font-mono font-bold text-zinc-100 text-sm mb-1">Report @{username}</h3>
-                <p className="text-zinc-500 font-mono text-xs mb-3">Tell us what's wrong — an admin will review.</p>
+                <p className="text-zinc-500 font-mono text-xs mb-3">Tell us what&apos;s wrong — an admin will review.</p>
                 <textarea
                   value={reportReason}
                   onChange={e => setReportReason(e.target.value)}

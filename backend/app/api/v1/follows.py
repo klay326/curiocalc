@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.cache import rate_limit_check
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.follow import Follow
@@ -22,6 +23,9 @@ async def follow_user(
     db: AsyncSession = Depends(get_db),
     me: User = Depends(get_current_user),
 ):
+    if not await rate_limit_check(f"rl:follow:{me.id}", max_requests=30, window=300):
+        raise HTTPException(status_code=429, detail="Too many follows. Please slow down.")
+
     result = await db.execute(select(User).where(User.username == username))
     target = result.scalar_one_or_none()
     if not target:

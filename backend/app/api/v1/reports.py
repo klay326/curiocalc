@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_superuser, get_current_user, get_db
+from app.cache import rate_limit_check
 from app.models.comment import Comment
 from app.models.report import Report
 from app.models.user import User
@@ -41,6 +42,8 @@ async def create_report(
     db: AsyncSession = Depends(get_db),
     me: User = Depends(get_current_user),
 ):
+    if not await rate_limit_check(f"rl:report:{me.id}", max_requests=10, window=3600):
+        raise HTTPException(status_code=429, detail="Too many reports. Please slow down.")
     if payload.target_type not in ("comment", "user"):
         raise HTTPException(status_code=422, detail="target_type must be 'comment' or 'user'")
     if not payload.reason.strip():

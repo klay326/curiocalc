@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
+from app.cache import rate_limit_check
 from app.models.trade_offer import TradeOffer
 from app.models.user import User
 from app.services.push import send_push_to_user
@@ -48,6 +49,9 @@ async def create_offer(
     db: AsyncSession = Depends(get_db),
     me: User = Depends(get_current_user),
 ):
+    if not await rate_limit_check(f"rl:trade_offer:{me.id}", max_requests=20, window=3600):
+        raise HTTPException(status_code=429, detail="Too many trade offers. Please slow down.")
+
     r = await db.execute(select(User).where(User.username == payload.to_username))
     recipient = r.scalar_one_or_none()
     if not recipient:

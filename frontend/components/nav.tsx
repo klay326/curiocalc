@@ -314,6 +314,8 @@ export function Nav() {
   const [showPicker, setShowPicker] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   const pickTheme = (t: (typeof THEMES)[number]) => {
     setTheme(t);
@@ -344,7 +346,16 @@ export function Nav() {
   }, [userMenuOpen]);
 
   // Close menus on navigation
-  useEffect(() => { setMenuOpen(false); setUserMenuOpen(false); }, [pathname]);
+  useEffect(() => { setMenuOpen(false); setUserMenuOpen(false); setMoreOpen(false); }, [pathname]);
+
+  // Close more dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    if (moreOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [moreOpen]);
 
   const isActive = useCallback((href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href), [pathname]);
@@ -369,6 +380,7 @@ export function Nav() {
     { href: '/compare', label: 'Compare' },
     { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },
+    { href: '/stats', label: 'Site stats' },
   ];
 
   // Mobile drawer only shows secondary/utility links — primary nav is in bottom tab bar
@@ -381,6 +393,7 @@ export function Nav() {
     { href: '/compare', label: 'Compare calcs' },
     { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },
+    { href: '/stats', label: 'Site stats' },
   ];
 
   return (
@@ -398,6 +411,31 @@ export function Nav() {
             {primaryLinks.map(({ href, label }) => (
               <Link key={href} href={href} className={linkCls(href)}>{label}</Link>
             ))}
+
+            {/* More dropdown */}
+            <div className="relative" ref={moreRef}>
+              <button
+                onClick={() => setMoreOpen(v => !v)}
+                className={`flex items-center gap-1 text-sm font-mono transition-colors ${
+                  moreOpen ? 'text-amber-400' : 'text-zinc-400 hover:text-zinc-100'
+                }`}
+              >
+                More
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" className="opacity-50">
+                  <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                </svg>
+              </button>
+              {moreOpen && (
+                <div className="absolute left-0 top-9 w-52 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
+                  {moreLinks.map(({ href, label }) => (
+                    <Link key={href} href={href} onClick={() => setMoreOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {user ? (
               <>

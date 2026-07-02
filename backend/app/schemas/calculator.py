@@ -83,5 +83,6 @@ class CalculatorPublic(CalculatorBase):
     owner_count: int = 0
     want_count: int = 0
     variant_count: int = 0  # number of known variants (0 for variants themselves)
+    like_count: int = 0
 
     model_config = {"from_attributes": True}
