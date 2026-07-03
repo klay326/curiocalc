@@ -239,6 +239,7 @@ export type Comment = {
   display_name: string | null;
   content: string;
   rating: number | null;
+  like_count: number;
   created_at: string;
 };
 
@@ -471,6 +472,13 @@ export const api = {
     liked: (id: string) => request<{ liked: boolean; count: number }>(`/api/v1/calculators/${id}/liked`),
     like: (id: string) => request<void>(`/api/v1/calculators/${id}/like`, { method: 'POST' }),
     unlike: (id: string) => request<void>(`/api/v1/calculators/${id}/like`, { method: 'DELETE' }),
+    myVote: (id: string) => request<{ rarity_score: number | null; weirdness_score: number | null }>(`/api/v1/calculators/${id}/my-vote`),
+    vote: (id: string, data: { rarity_score?: number; weirdness_score?: number }) => {
+      const q = new URLSearchParams();
+      if (data.rarity_score != null) q.set('rarity_score', String(data.rarity_score));
+      if (data.weirdness_score != null) q.set('weirdness_score', String(data.weirdness_score));
+      return request<Calculator>(`/api/v1/calculators/${id}/vote?${q}`, { method: 'POST' });
+    },
     submitImage: async (id: string, file: File): Promise<void> => {
       const token = getToken();
       const form = new FormData();
@@ -662,6 +670,12 @@ export const api = {
       request<Comment>(`/api/v1/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (commentId: string) =>
       request<void>(`/api/v1/comments/${commentId}`, { method: 'DELETE' }),
+    liked: (commentId: string) =>
+      request<{ liked: boolean; count: number }>(`/api/v1/comments/${commentId}/liked`),
+    like: (commentId: string) =>
+      request<void>(`/api/v1/comments/${commentId}/like`, { method: 'POST' }),
+    unlike: (commentId: string) =>
+      request<void>(`/api/v1/comments/${commentId}/like`, { method: 'DELETE' }),
   },
 
   trade: {

@@ -11,6 +11,7 @@ from app.api.deps import get_current_staff, get_current_superuser, get_current_u
 from app.cache import cache_del, cache_get, cache_get_int, cache_incr, cache_set
 from app.models.calculator import Calculator
 from app.models.calculator_like import CalculatorLike
+from app.models.calculator_vote import CalculatorVote
 from app.models.collection import CollectionEntry
 from app.models.image_submission import ImageSubmission
 from app.models.user import User
@@ -727,6 +728,90 @@ async def unlike_calculator(
     if like:
         await db.delete(like)
         await db.commit()
+
+
+@router.get("/{calc_id}/my-vote")
+async def get_my_vote(
+    calc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(CalculatorVote).where(
+            CalculatorVote.user_id == current_user.id,
+            CalculatorVote.calculator_id == calc_id,
+        )
+    )
+    vote = result.scalar_one_or_none()
+    return {
+        "rarity_score": vote.rarity_score if vote else None,
+        "weirdness_score": vote.weirdness_score if vote else None,
+    }
+
+
+@router.post("/{calc_id}/vote", response_model=CalculatorPublic)
+async def vote_calculator(
+    calc_id: uuid.UUID,
+    rarity_score: float | None = None,
+    weirdness_score: float | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if rarity_score is not None and not (1 <= rarity_score <= 10):
+        raise HTTPException(status_code=422, detail="rarity_score must be 1–10")
+    if weirdness_score is not None and not (1 <= weirdness_score <= 10):
+        raise HTTPException(status_code=422, detail="weirdness_score must be 1–10")
+
+    calc_r = await db.execute(select(Calculator).where(Calculator.id == calc_id))
+    calc = calc_r.scalar_one_or_none()
+    if not calc:
+        raise HTTPException(status_code=404, detail="Calculator not found")
+
+    # Upsert vote
+    vote_r = await db.execute(
+        select(CalculatorVote).where(
+            CalculatorVote.user_id == current_user.id,
+            CalculatorVote.calculator_id == calc_id,
+        )
+    )
+    vote = vote_r.scalar_one_or_none()
+    if vote:
+        if rarity_score is not None:
+            vote.rarity_score = rarity_score
+        if weirdness_score is not None:
+            vote.weirdness_score = weirdness_score
+    else:
+        vote = CalculatorVote(
+            user_id=current_user.id,
+            calculator_id=calc_id,
+            rarity_score=rarity_score,
+            weirdness_score=weirdness_score,
+        )
+        db.add(vote)
+    await db.flush()
+
+    # Recalculate averages from all votes
+    if rarity_score is not None:
+        avg_r = await db.execute(
+            select(func.avg(CalculatorVote.rarity_score)).where(
+                CalculatorVote.calculator_id == calc_id,
+                CalculatorVote.rarity_score.isnot(None),
+            )
+        )
+        calc.rarity_score = round(avg_r.scalar() or rarity_score, 1)
+
+    if weirdness_score is not None:
+        avg_w = await db.execute(
+            select(func.avg(CalculatorVote.weirdness_score)).where(
+                CalculatorVote.calculator_id == calc_id,
+                CalculatorVote.weirdness_score.isnot(None),
+            )
+        )
+        calc.weirdness_score = round(avg_w.scalar() or weirdness_score, 1)
+
+    await db.commit()
+    await db.refresh(calc)
+    return await _with_counts(db, calc)
 
 
 @router.post("/{calc_id}/submit-image", status_code=204)

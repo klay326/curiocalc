@@ -101,6 +101,11 @@ export default function CalculatorPage() {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [likePending, setLikePending] = useState(false);
+  const [myVote, setMyVote] = useState<{rarity_score: number | null; weirdness_score: number | null} | null>(null);
+  const [voteRarity, setVoteRarity] = useState(5);
+  const [voteWeirdness, setVoteWeirdness] = useState(5);
+  const [voteSaving, setVoteSaving] = useState(false);
+  const [voteSubmitted, setVoteSubmitted] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -146,6 +151,18 @@ export default function CalculatorPage() {
       .catch(() => {});
   }, [id, user]);
 
+  // Load my vote for logged-in user
+  useEffect(() => {
+    if (!user || !id) return;
+    api.calculators.myVote(id)
+      .then(v => {
+        setMyVote(v);
+        if (v.rarity_score != null) setVoteRarity(Math.round(v.rarity_score));
+        if (v.weirdness_score != null) setVoteWeirdness(Math.round(v.weirdness_score));
+      })
+      .catch(() => {});
+  }, [id, user]);
+
   const toggleLike = async () => {
     if (!user || likePending) return;
     setLikePending(true);
@@ -163,6 +180,18 @@ export default function CalculatorPage() {
     }
   };
 
+
+  const handleVote = async () => {
+    setVoteSaving(true);
+    try {
+      const updated = await api.calculators.vote(id, { rarity_score: voteRarity, weirdness_score: voteWeirdness });
+      setCalc(updated);
+      setMyVote({ rarity_score: voteRarity, weirdness_score: voteWeirdness });
+      setVoteSubmitted(true);
+      setTimeout(() => setVoteSubmitted(false), 3000);
+    } catch {}
+    finally { setVoteSaving(false); }
+  };
 
   const removeImageDirect = async (index: number) => {
     if (!calc) return;
@@ -519,6 +548,52 @@ export default function CalculatorPage() {
               </>
             ) : null}
           </div>
+
+          {/* Community voting */}
+          {user && (
+            <div className="mt-4 bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+              <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Rate this calculator</p>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[10px] font-mono text-zinc-500">Rarity</label>
+                    <span className="text-[10px] font-mono text-amber-400">{voteRarity}/10</span>
+                  </div>
+                  <input
+                    type="range" min={1} max={10} value={voteRarity}
+                    onChange={e => setVoteRarity(Number(e.target.value))}
+                    className="w-full accent-amber-400"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[10px] font-mono text-zinc-500">Weirdness</label>
+                    <span className="text-[10px] font-mono text-pink-400">{voteWeirdness}/10</span>
+                  </div>
+                  <input
+                    type="range" min={1} max={10} value={voteWeirdness}
+                    onChange={e => setVoteWeirdness(Number(e.target.value))}
+                    className="w-full accent-pink-400"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={handleVote}
+                  disabled={voteSaving}
+                  className="px-3 py-1.5 bg-amber-400 text-zinc-950 rounded-lg font-mono text-xs font-bold hover:bg-amber-300 transition-colors disabled:opacity-50"
+                >
+                  {voteSaving ? 'Saving…' : myVote ? 'Update vote' : 'Submit vote'}
+                </button>
+                {voteSubmitted && <span className="text-[10px] font-mono text-green-400">✓ Saved!</span>}
+                {myVote && !voteSubmitted && (
+                  <span className="text-[10px] font-mono text-zinc-600">
+                    Your vote: R{myVote.rarity_score ?? '–'} W{myVote.weirdness_score ?? '–'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1433,6 +1508,8 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
   const [reportReason, setReportReason] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
+  const [commentLikes, setCommentLikes] = useState<Record<string, {liked: boolean; count: number}>>({});
+  const [commentLikePending, setCommentLikePending] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api.comments.list(calcId)
@@ -1440,6 +1517,17 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [calcId]);
+
+  useEffect(() => {
+    if (!currentUser || comments.length === 0) return;
+    Promise.all(
+      comments.map(c => api.comments.liked(c.id).catch(() => ({ liked: false, count: c.like_count ?? 0 })))
+    ).then(results => {
+      const map: Record<string, {liked: boolean; count: number}> = {};
+      comments.forEach((c, i) => { map[c.id] = results[i]; });
+      setCommentLikes(map);
+    });
+  }, [comments, currentUser]);
 
   const handleSubmit = async () => {
     if (!content.trim()) return;
@@ -1485,6 +1573,21 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
       await api.comments.delete(commentId);
       setComments(prev => prev.filter(c => c.id !== commentId));
     } catch {}
+  };
+
+  const toggleCommentLike = async (commentId: string) => {
+    if (!currentUser || commentLikePending.has(commentId)) return;
+    setCommentLikePending(prev => new Set(prev).add(commentId));
+    const cur = commentLikes[commentId] ?? { liked: false, count: 0 };
+    setCommentLikes(prev => ({ ...prev, [commentId]: { liked: !cur.liked, count: cur.liked ? Math.max(0, cur.count - 1) : cur.count + 1 } }));
+    try {
+      if (cur.liked) await api.comments.unlike(commentId);
+      else await api.comments.like(commentId);
+    } catch {
+      setCommentLikes(prev => ({ ...prev, [commentId]: cur }));
+    } finally {
+      setCommentLikePending(prev => { const s = new Set(prev); s.delete(commentId); return s; });
+    }
   };
 
   const handleSubmitReport = async (commentId: string) => {
@@ -1680,7 +1783,23 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
                   </div>
                 </div>
               ) : (
-                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line">{c.content}</p>
+                <>
+                  <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line">{c.content}</p>
+                  {currentUser && currentUser.id !== c.user_id && (
+                    <button
+                      onClick={() => toggleCommentLike(c.id)}
+                      disabled={commentLikePending.has(c.id)}
+                      className={`mt-2 text-[11px] font-mono transition-colors ${
+                        commentLikes[c.id]?.liked
+                          ? 'text-red-400 hover:text-red-300'
+                          : 'text-zinc-700 hover:text-zinc-400'
+                      }`}
+                    >
+                      {commentLikes[c.id]?.liked ? '♥' : '♡'}
+                      {(commentLikes[c.id]?.count ?? c.like_count ?? 0) > 0 ? ` ${commentLikes[c.id]?.count ?? c.like_count}` : ''}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           ))}

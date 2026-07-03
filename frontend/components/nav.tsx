@@ -374,6 +374,7 @@ export function Nav() {
   ];
 
   const moreLinks = [
+    { href: '/search', label: 'Search' },
     { href: '/timeline', label: 'Timeline' },
     { href: '/top', label: 'Top collectors' },
     { href: '/collectors', label: 'Discover collectors' },
@@ -385,6 +386,7 @@ export function Nav() {
 
   // Mobile drawer only shows secondary/utility links — primary nav is in bottom tab bar
   const mobileDiscoverLinks = [
+    { href: '/search', label: 'Search' },
     { href: '/brands', label: 'Brands' },
     { href: '/trending', label: 'Trending' },
     { href: '/timeline', label: 'Timeline' },

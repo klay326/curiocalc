@@ -7,9 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.cache import rate_limit_check
+from sqlalchemy import func as sqlfunc
+
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.comment import Comment
+from app.models.comment_like import CommentLike
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.comment import CommentCreate, CommentPublic
@@ -19,7 +22,7 @@ from app.services.push import send_push_to_user
 router = APIRouter(tags=["comments"])
 
 
-def _to_public(comment: Comment, user: User) -> CommentPublic:
+def _to_public(comment: Comment, user: User, like_count: int = 0) -> CommentPublic:
     return CommentPublic(
         id=comment.id,
         calculator_id=comment.calculator_id,
@@ -28,6 +31,7 @@ def _to_public(comment: Comment, user: User) -> CommentPublic:
         display_name=user.display_name,
         content=comment.content,
         rating=comment.rating,
+        like_count=like_count,
         created_at=comment.created_at,
     )
 
@@ -41,7 +45,71 @@ async def list_comments(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
         .order_by(Comment.created_at.desc())
     )
     rows = result.all()
-    return [_to_public(c, u) for c, u in rows]
+    if not rows:
+        return []
+    comment_ids = [c.id for c, _ in rows]
+    likes_r = await db.execute(
+        select(CommentLike.comment_id, sqlfunc.count(CommentLike.id).label("cnt"))
+        .where(CommentLike.comment_id.in_(comment_ids))
+        .group_by(CommentLike.comment_id)
+    )
+    likes_map = {row.comment_id: row.cnt for row in likes_r}
+    return [_to_public(c, u, likes_map.get(c.id, 0)) for c, u in rows]
+
+
+@router.get("/comments/{comment_id}/liked")
+async def get_comment_liked(
+    comment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    existing = await db.execute(
+        select(CommentLike).where(
+            CommentLike.user_id == current_user.id,
+            CommentLike.comment_id == comment_id,
+        )
+    )
+    liked = existing.scalar_one_or_none() is not None
+    count_r = await db.execute(
+        select(sqlfunc.count(CommentLike.id)).where(CommentLike.comment_id == comment_id)
+    )
+    return {"liked": liked, "count": count_r.scalar() or 0}
+
+
+@router.post("/comments/{comment_id}/like", status_code=status.HTTP_204_NO_CONTENT)
+async def like_comment(
+    comment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    existing = await db.execute(
+        select(CommentLike).where(
+            CommentLike.user_id == current_user.id,
+            CommentLike.comment_id == comment_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return
+    db.add(CommentLike(user_id=current_user.id, comment_id=comment_id))
+    await db.commit()
+
+
+@router.delete("/comments/{comment_id}/like", status_code=status.HTTP_204_NO_CONTENT)
+async def unlike_comment(
+    comment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    existing = await db.execute(
+        select(CommentLike).where(
+            CommentLike.user_id == current_user.id,
+            CommentLike.comment_id == comment_id,
+        )
+    )
+    like = existing.scalar_one_or_none()
+    if like:
+        await db.delete(like)
+        await db.commit()
 
 
 @router.post(

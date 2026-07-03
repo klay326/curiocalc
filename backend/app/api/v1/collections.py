@@ -10,6 +10,7 @@ from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.notification import Notification
 from app.models.user import User
+from app.services.push import send_push_to_user
 from app.schemas.collection import (
     CollectionEntryCreate,
     CollectionEntryPublic,
@@ -47,6 +48,44 @@ async def get_user_collection(username: str, db: AsyncSession = Depends(get_db))
     return result.scalars().all()
 
 
+async def _notify_wishers_for_sale(
+    db: AsyncSession, calc_id: Any, calc: Any, seller: User
+) -> None:
+    """Notify users who want this calc that it's now for sale."""
+    wishers_r = await db.execute(
+        select(CollectionEntry.user_id)
+        .where(
+            CollectionEntry.calculator_id == calc_id,
+            CollectionEntry.status == "wanted",
+            CollectionEntry.user_id != seller.id,
+        )
+        .limit(50)
+    )
+    wisher_ids = [row[0] for row in wishers_r.all()]
+    for wid in wisher_ids:
+        db.add(Notification(
+            user_id=wid,
+            type="for_sale",
+            actor_id=seller.id,
+            actor_username=seller.username,
+            actor_display_name=seller.display_name,
+            actor_avatar_url=seller.avatar_url,
+            calc_id=calc.id,
+            calc_make=calc.make,
+            calc_model=calc.model,
+            body=f"@{seller.username} listed it for sale",
+        ))
+    if wisher_ids:
+        await db.commit()
+        for wid in wisher_ids:
+            await send_push_to_user(
+                wid, db,
+                f"{calc.make} {calc.model} is for sale",
+                f"@{seller.username} listed it",
+                data={"url": f"/calculators/{calc.id}"},
+            )
+
+
 @router.post("", response_model=CollectionEntryPublic, status_code=status.HTTP_201_CREATED)
 async def add_to_collection(
     payload: CollectionEntryCreate,
@@ -57,6 +96,13 @@ async def add_to_collection(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+
+    if payload.status == "for_sale":
+        calc_r = await db.execute(select(Calculator).where(Calculator.id == payload.calculator_id))
+        calc = calc_r.scalar_one_or_none()
+        if calc:
+            await _notify_wishers_for_sale(db, payload.calculator_id, calc, current_user)
+
     return entry
 
 
@@ -76,36 +122,15 @@ async def update_collection_entry(
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(entry, field, value)
 
+    await db.commit()
+
     # When a calc goes for sale, notify everyone who has it on their wishlist
     now_for_sale = entry.status == "for_sale" and not was_for_sale
     if now_for_sale:
         calc_r = await db.execute(select(Calculator).where(Calculator.id == entry.calculator_id))
         calc = calc_r.scalar_one_or_none()
         if calc:
-            wishers_r = await db.execute(
-                select(CollectionEntry.user_id)
-                .where(
-                    CollectionEntry.calculator_id == entry.calculator_id,
-                    CollectionEntry.status == "wanted",
-                    CollectionEntry.user_id != current_user.id,
-                )
-                .limit(50)
-            )
-            for (wisher_id,) in wishers_r.all():
-                db.add(Notification(
-                    user_id=wisher_id,
-                    type="for_sale",
-                    actor_id=current_user.id,
-                    actor_username=current_user.username,
-                    actor_display_name=current_user.display_name,
-                    actor_avatar_url=current_user.avatar_url,
-                    calc_id=calc.id,
-                    calc_make=calc.make,
-                    calc_model=calc.model,
-                    body=f"@{current_user.username} listed it for sale",
-                ))
-
-    await db.commit()
+            await _notify_wishers_for_sale(db, entry.calculator_id, calc, current_user)
     await db.refresh(entry)
     return entry
 
