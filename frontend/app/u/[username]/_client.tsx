@@ -572,6 +572,12 @@ export default function UserProfilePage() {
           )}
         </div>
 
+        {ownedEntries.length > 0 && (
+          <Link href={`/u/${username}/stats`}
+            className="text-xs font-mono text-zinc-500 hover:text-amber-400 border border-zinc-700 hover:border-amber-700/50 px-3 py-2 rounded-lg transition-colors">
+            📊 stats
+          </Link>
+        )}
         {wantedEntries.length > 0 && (
           <button
             onClick={copyWishlistLink}

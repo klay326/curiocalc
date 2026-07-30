@@ -94,6 +94,19 @@ export type UserSearchEntry = {
   is_following: boolean;
 };
 
+export type UserCollectionStats = {
+  owned_count: number;
+  wanted_count: number;
+  total_value: number | null;
+  avg_price: number | null;
+  brand_counts: Record<string, number>;
+  decade_counts: Record<string, number>;
+  condition_counts: Record<string, number>;
+  top_tags: { tag: string; count: number }[];
+  avg_rarity: number | null;
+  avg_weirdness: number | null;
+};
+
 export type TradeMatch = {
   user_id: string;
   username: string;
@@ -607,6 +620,8 @@ export const api = {
     },
     removeShelfPhoto: (index: number) =>
       request<AuthUser>(`/api/v1/users/me/collection-photos/${index}`, { method: 'DELETE' }),
+    collectionStats: (username: string) =>
+      request<UserCollectionStats>(`/api/v1/users/${username}/stats`),
   },
 
   stats: {

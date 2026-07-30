@@ -1,8 +1,11 @@
 import asyncio
+from collections import Counter
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.calculator import Calculator
 
 from app.api.deps import get_current_user, get_db, get_optional_user
 from app.models.collection import CollectionEntry
@@ -215,3 +218,57 @@ async def get_user(
         collection_photos=user.collection_photos or [],
         showcase_ids=user.showcase_ids or [],
     )
+
+
+@router.get("/{username}/stats")
+async def get_user_stats(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public collection stats for any user."""
+    user_r = await db.execute(select(User).where(User.username == username))
+    user = user_r.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    entries_r = await db.execute(
+        select(CollectionEntry, Calculator)
+        .join(Calculator, Calculator.id == CollectionEntry.calculator_id)
+        .where(
+            CollectionEntry.user_id == user.id,
+            CollectionEntry.visibility == "public",
+        )
+    )
+    rows = entries_r.all()
+
+    owned = [(e, c) for e, c in rows if e.status == "owned"]
+    wanted = [(e, c) for e, c in rows if e.status == "wanted"]
+
+    brand_counts = Counter(c.make for _, c in owned)
+    decade_counts: Counter = Counter()
+    for _, c in owned:
+        if c.year_introduced:
+            decade_counts[str((c.year_introduced // 10) * 10) + "s"] += 1
+
+    condition_counts = Counter(e.condition for e, _ in owned if e.condition)
+    tag_counts: Counter = Counter()
+    for _, c in owned:
+        for t in (c.tags or []):
+            tag_counts[t] += 1
+
+    prices = [e.acquired_price for e, _ in owned if e.acquired_price]
+    rarity_scores = [c.rarity_score for _, c in owned if c.rarity_score is not None]
+    weirdness_scores = [c.weirdness_score for _, c in owned if c.weirdness_score is not None]
+
+    return {
+        "owned_count": len(owned),
+        "wanted_count": len(wanted),
+        "total_value": round(sum(prices), 2) if prices else None,
+        "avg_price": round(sum(prices) / len(prices), 2) if prices else None,
+        "brand_counts": dict(brand_counts.most_common(15)),
+        "decade_counts": dict(sorted(decade_counts.items())),
+        "condition_counts": dict(condition_counts),
+        "top_tags": [{"tag": t, "count": n} for t, n in tag_counts.most_common(20)],
+        "avg_rarity": round(sum(rarity_scores) / len(rarity_scores), 1) if rarity_scores else None,
+        "avg_weirdness": round(sum(weirdness_scores) / len(weirdness_scores), 1) if weirdness_scores else None,
+    }
