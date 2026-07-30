@@ -375,6 +375,15 @@ export type ImageSubmission = {
   submitted_by_username: string | null;
 };
 
+export type PriceGuide = {
+  count: number;
+  avg: number | null;
+  min: number | null;
+  max: number | null;
+  median: number | null;
+  recent: { price: number; date: string }[];
+};
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('access_token');
@@ -492,6 +501,7 @@ export const api = {
       if (data.weirdness_score != null) q.set('weirdness_score', String(data.weirdness_score));
       return request<Calculator>(`/api/v1/calculators/${id}/vote?${q}`, { method: 'POST' });
     },
+    priceGuide: (id: string) => request<PriceGuide>(`/api/v1/calculators/${id}/price-guide`),
     submitImage: async (id: string, file: File): Promise<void> => {
       const token = getToken();
       const form = new FormData();

@@ -1,11 +1,31 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, type Calculator } from '@/lib/api';
 
-export default function ComparePage() {
+function ComparePageContent() {
+  const params = useSearchParams();
+  const router = useRouter();
   const [leftCalc, setLeftCalc]   = useState<Calculator | null>(null);
   const [rightCalc, setRightCalc] = useState<Calculator | null>(null);
+
+  // Load calcs from URL params on mount
+  useEffect(() => {
+    const a = params.get('a');
+    const b = params.get('b');
+    if (a) api.calculators.get(a).then(setLeftCalc).catch(() => {});
+    if (b) api.calculators.get(b).then(setRightCalc).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync URL when calcs change
+  useEffect(() => {
+    const q = new URLSearchParams();
+    if (leftCalc) q.set('a', leftCalc.id);
+    if (rightCalc) q.set('b', rightCalc.id);
+    const qs = q.toString();
+    router.replace(qs ? `/compare?${qs}` : '/compare', { scroll: false });
+  }, [leftCalc, rightCalc, router]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -33,6 +53,10 @@ export default function ComparePage() {
       )}
     </div>
   );
+}
+
+export default function ComparePage() {
+  return <Suspense><ComparePageContent /></Suspense>;
 }
 
 /* ── Search picker ── */

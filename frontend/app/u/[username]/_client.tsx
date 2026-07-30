@@ -246,6 +246,8 @@ export default function UserProfilePage() {
   const [reportReason, setReportReason] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [showcaseIds, setShowcaseIds] = useState<string[]>([]);
+  const [showcaseSaving, setShowcaseSaving] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -257,6 +259,7 @@ export default function UserProfilePage() {
         setProfile(p);
         setFollowing(p.is_following);
         setFollowerCount(p.follower_count);
+        setShowcaseIds(p.showcase_ids ?? []);
         setEntries(e);
         // Batch fetch all collection calcs + showcase calcs
         const collectionIds = [...new Set(e.map(entry => entry.calculator_id))];
@@ -285,6 +288,22 @@ export default function UserProfilePage() {
       }
     } catch (e) { console.error(e); }
     finally { setFollowLoading(false); }
+  };
+
+  const toggleShowcase = async (calcId: string) => {
+    if (showcaseSaving) return;
+    setShowcaseSaving(true);
+    const next = showcaseIds.includes(calcId)
+      ? showcaseIds.filter(id => id !== calcId)
+      : [...showcaseIds, calcId].slice(-6); // max 6 showcase slots
+    setShowcaseIds(next);
+    try {
+      await api.users.updateMe({ showcase_ids: next });
+    } catch {
+      setShowcaseIds(showcaseIds); // rollback
+    } finally {
+      setShowcaseSaving(false);
+    }
   };
 
   const submitReport = async () => {
@@ -484,28 +503,47 @@ export default function UserProfilePage() {
       </div>
 
       {/* Showcase */}
-      {(profile.showcase_ids?.length ?? 0) > 0 && (
+      {(showcaseIds.length > 0 || isOwn) && (
         <div className="mb-6">
-          <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Showcase</p>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {(profile.showcase_ids ?? []).map(id => {
-              const c = calcMap[id];
-              if (!c) return null;
-              return (
-                <Link key={id} href={`/calculators/${id}`} className="group bg-zinc-900 border border-amber-900/30 hover:border-amber-400/40 rounded-xl overflow-hidden transition-colors">
-                  <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
-                    {c.images[0]
-                      ? <img src={c.images[0]} alt={c.model} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
-                      : <span className="text-2xl opacity-20">🧮</span>}
-                  </div>
-                  <div className="p-1.5">
-                    <p className="text-[9px] font-mono text-zinc-600 truncate">{c.make}</p>
-                    <p className="text-[10px] font-bold font-mono text-zinc-300 group-hover:text-amber-400 transition-colors truncate">{c.model}</p>
-                  </div>
-                </Link>
-              );
-            })}
+          <div className="flex items-center gap-2 mb-3">
+            <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">Showcase</p>
+            {isOwn && <p className="text-[10px] font-mono text-zinc-700">(pin up to 6 from your collection)</p>}
           </div>
+          {showcaseIds.length === 0 && isOwn ? (
+            <p className="text-xs font-mono text-zinc-700">No pins yet — click ★ on owned calcs below to pin them here.</p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {showcaseIds.map(id => {
+                const c = calcMap[id];
+                if (!c) return null;
+                return (
+                  <div key={id} className="relative group">
+                    <Link href={`/calculators/${id}`} className="block bg-zinc-900 border border-amber-900/30 hover:border-amber-400/40 rounded-xl overflow-hidden transition-colors">
+                      <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
+                        {c.images[0]
+                          ? <img src={c.images[0]} alt={c.model} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                          : <span className="text-2xl opacity-20">🧮</span>}
+                      </div>
+                      <div className="p-1.5">
+                        <p className="text-[9px] font-mono text-zinc-600 truncate">{c.make}</p>
+                        <p className="text-[10px] font-bold font-mono text-zinc-300 group-hover:text-amber-400 transition-colors truncate">{c.model}</p>
+                      </div>
+                    </Link>
+                    {isOwn && (
+                      <button
+                        onClick={() => toggleShowcase(id)}
+                        disabled={showcaseSaving}
+                        title="Unpin from showcase"
+                        className="absolute top-1 right-1 w-5 h-5 bg-zinc-900/80 border border-zinc-700 rounded text-amber-400 text-[10px] flex items-center justify-center hover:bg-red-900/40 hover:border-red-900/50 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        ★
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -636,6 +674,20 @@ export default function UserProfilePage() {
                     {entry.condition}
                   </span>
                 </div>
+              )}
+              {isOwn && tab === 'owned' && (
+                <button
+                  onClick={() => toggleShowcase(calc.id)}
+                  disabled={showcaseSaving}
+                  title={showcaseIds.includes(calc.id) ? 'Unpin from showcase' : 'Pin to showcase'}
+                  className={`absolute top-2 right-2 w-6 h-6 rounded border text-[11px] flex items-center justify-center transition-colors ${
+                    showcaseIds.includes(calc.id)
+                      ? 'bg-amber-400/20 border-amber-400/50 text-amber-400'
+                      : 'bg-zinc-950/80 border-zinc-700 text-zinc-600 hover:border-amber-400/50 hover:text-amber-400'
+                  } backdrop-blur-sm`}
+                >
+                  ★
+                </button>
               )}
             </div>
           ))}

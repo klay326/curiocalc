@@ -261,6 +261,7 @@ function CalcsTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkType, setBulkType] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [featuring, setFeaturing] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Calculator> & { tags_str?: string }>({});
   const [saving, setSaving] = useState(false);
@@ -307,6 +308,20 @@ function CalcsTab() {
     setBulkLoading(true);
     await Promise.all([...selected].map(id => api.calculators.delete(id)));
     await fetchAll(); clearSelected(); setBulkLoading(false);
+  };
+
+  const toggleFeature = async (calc: Calculator) => {
+    setFeaturing(calc.id);
+    try {
+      if (calc.is_featured) {
+        await api.admin.unfeatureCalculator(calc.id);
+        setCalcs(prev => prev.map(c => ({ ...c, is_featured: c.id === calc.id ? false : c.is_featured })));
+      } else {
+        await api.admin.featureCalculator(calc.id);
+        setCalcs(prev => prev.map(c => ({ ...c, is_featured: c.id === calc.id })));
+      }
+    } catch { /* ignore */ }
+    finally { setFeaturing(null); }
   };
 
   const fetchWiki = async () => {
@@ -517,7 +532,19 @@ function CalcsTab() {
                     <p className="text-[11px] text-zinc-600 font-mono truncate mt-0.5">{calc.description.slice(0, 100)}</p>
                   )}
                 </div>
-                <div className="flex gap-2 flex-shrink-0">
+                <div className="flex gap-2 flex-shrink-0 items-center">
+                  {calc.is_featured && (
+                    <span className="text-[9px] font-mono text-amber-400 bg-amber-900/20 border border-amber-900/40 px-1.5 py-0.5 rounded">★ featured</span>
+                  )}
+                  <button onClick={() => toggleFeature(calc)} disabled={featuring === calc.id}
+                    title={calc.is_featured ? 'Unpin as featured' : 'Pin as calculator of the week'}
+                    className={`text-[11px] font-mono px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
+                      calc.is_featured
+                        ? 'text-amber-400 border-amber-900/40 hover:border-red-900/40 hover:text-red-400'
+                        : 'text-zinc-600 border-zinc-800 hover:border-amber-900/40 hover:text-amber-400'
+                    }`}>
+                    {featuring === calc.id ? '…' : calc.is_featured ? '★' : '☆'}
+                  </button>
                   <Link href={`/calculators/${calc.id}`}
                     className="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono px-2 py-1 rounded border border-zinc-800 hover:border-zinc-600 transition-colors">
                     view
@@ -1264,6 +1291,8 @@ function SubmissionsTab() {
   const [calcs, setCalcs] = useState<Calculator[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkActing, setBulkActing] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1275,11 +1304,18 @@ function SubmissionsTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
+  const selectAll = () => setSelected(new Set(calcs.map(c => c.id)));
+  const clearSelected = () => setSelected(new Set());
+
   const approve = async (id: string) => {
     setActing(id);
     try {
       await api.admin.approveSubmission(id);
       setCalcs(prev => prev.filter(c => c.id !== id));
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     } catch { /* ignore */ }
     finally { setActing(null); }
   };
@@ -1289,8 +1325,28 @@ function SubmissionsTab() {
     try {
       await api.admin.rejectSubmission(id);
       setCalcs(prev => prev.filter(c => c.id !== id));
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     } catch { /* ignore */ }
     finally { setActing(null); }
+  };
+
+  const bulkApprove = async () => {
+    setBulkActing(true);
+    const ids = [...selected];
+    await Promise.all(ids.map(id => api.admin.approveSubmission(id).catch(() => {})));
+    setCalcs(prev => prev.filter(c => !ids.includes(c.id)));
+    clearSelected();
+    setBulkActing(false);
+  };
+
+  const bulkReject = async () => {
+    if (!confirm(`Reject ${selected.size} submissions?`)) return;
+    setBulkActing(true);
+    const ids = [...selected];
+    await Promise.all(ids.map(id => api.admin.rejectSubmission(id).catch(() => {})));
+    setCalcs(prev => prev.filter(c => !ids.includes(c.id)));
+    clearSelected();
+    setBulkActing(false);
   };
 
   if (loading) return <div className="text-zinc-600 font-mono text-sm animate-pulse py-8">Loading…</div>;
@@ -1303,9 +1359,33 @@ function SubmissionsTab() {
 
   return (
     <div className="space-y-3 max-w-3xl">
-      <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-4">{calcs.length} pending</p>
+      <div className="flex items-center gap-3 flex-wrap mb-4">
+        <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">{calcs.length} pending</p>
+        {selected.size === 0 ? (
+          <button onClick={selectAll} className="text-[11px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors">
+            Select all
+          </button>
+        ) : (
+          <>
+            <span className="text-xs font-mono text-zinc-400">{selected.size} selected</span>
+            <button onClick={bulkApprove} disabled={bulkActing}
+              className="text-xs font-mono px-2.5 py-1 rounded bg-green-900/40 text-green-400 border border-green-900/50 hover:bg-green-900/60 transition-colors disabled:opacity-50">
+              ✓ Approve all
+            </button>
+            <button onClick={bulkReject} disabled={bulkActing}
+              className="text-xs font-mono px-2.5 py-1 rounded bg-red-900/20 text-red-400 border border-red-900/30 hover:bg-red-900/30 transition-colors disabled:opacity-50">
+              ✕ Reject all
+            </button>
+            <button onClick={clearSelected} className="text-xs font-mono text-zinc-600 hover:text-zinc-300">✕ Clear</button>
+          </>
+        )}
+      </div>
       {calcs.map(calc => (
-        <div key={calc.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-start gap-4">
+        <div key={calc.id} className={`bg-zinc-900 border rounded-xl p-4 flex items-start gap-3 ${
+          selected.has(calc.id) ? 'border-amber-900/40' : 'border-zinc-800'
+        }`}>
+          <input type="checkbox" checked={selected.has(calc.id)} onChange={() => toggleSelect(calc.id)}
+            className="accent-amber-400 mt-1 flex-shrink-0" />
           <div className="w-14 h-14 flex-shrink-0 rounded-lg bg-zinc-800 overflow-hidden flex items-center justify-center">
             {calc.images[0]
               ? <img src={calc.images[0]} alt="" className="w-full h-full object-contain" />
@@ -1337,14 +1417,14 @@ function SubmissionsTab() {
               className="text-[10px] font-mono text-zinc-500 hover:text-amber-400 transition-colors text-right">preview ↗</Link>
             <button
               onClick={() => approve(calc.id)}
-              disabled={acting === calc.id}
+              disabled={acting === calc.id || bulkActing}
               className="px-3 py-1.5 bg-green-900/40 text-green-400 border border-green-900/50 rounded-lg font-mono text-xs font-bold hover:bg-green-900/60 transition-colors disabled:opacity-50"
             >
               {acting === calc.id ? '…' : '✓ approve'}
             </button>
             <button
               onClick={() => reject(calc.id)}
-              disabled={acting === calc.id}
+              disabled={acting === calc.id || bulkActing}
               className="px-3 py-1.5 bg-red-950/30 text-red-400 border border-red-900/30 rounded-lg font-mono text-xs hover:bg-red-900/20 transition-colors disabled:opacity-50"
             >
               ✕ reject

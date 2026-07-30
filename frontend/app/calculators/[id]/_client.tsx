@@ -106,6 +106,7 @@ export default function CalculatorPage() {
   const [voteWeirdness, setVoteWeirdness] = useState(5);
   const [voteSaving, setVoteSaving] = useState(false);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
+  const [priceGuide, setPriceGuide] = useState<import('@/lib/api').PriceGuide | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -117,16 +118,18 @@ export default function CalculatorPage() {
         setCalc(c);
         recordRecentlyViewed(c.id);
         // Load related, variants, and parent in parallel
-        const [r, v, p, ao] = await Promise.all([
+        const [r, v, p, ao, pg] = await Promise.all([
           api.calculators.related(id).catch(() => []),
           api.calculators.variants(id).catch(() => []),
           c.parent_id ? api.calculators.get(c.parent_id).catch(() => null) : Promise.resolve(null),
           api.calculators.alsoOwned(id).catch(() => []),
+          api.calculators.priceGuide(id).catch(() => null),
         ]);
         setRelated(r);
         setVariants(v);
         setParentCalc(p);
         setAlsoOwned(ao);
+        setPriceGuide(pg);
       })
       .catch(() => router.push('/'))
       .finally(() => setLoading(false));
@@ -596,6 +599,31 @@ export default function CalculatorPage() {
           )}
         </div>
       </div>
+
+      {/* Price guide */}
+      {priceGuide && priceGuide.count > 0 && (
+        <div className="mt-8 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <h2 className="text-[10px] font-mono text-zinc-600 mb-4 uppercase tracking-widest">
+            Price Guide <span className="text-zinc-700">— {priceGuide.count} report{priceGuide.count !== 1 ? 's' : ''}</span>
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {([
+              { label: 'Avg',    val: priceGuide.avg },
+              { label: 'Median', val: priceGuide.median },
+              { label: 'Low',    val: priceGuide.min },
+              { label: 'High',   val: priceGuide.max },
+            ] as { label: string; val: number | null }[]).map(({ label, val }) => (
+              <div key={label} className="bg-zinc-800/60 rounded-xl p-3 text-center">
+                <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-1">{label}</p>
+                <p className="text-lg font-bold font-mono text-amber-400">
+                  {val != null ? `$${val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] font-mono text-zinc-700 mt-3">Prices reported by collectors. Not financial advice.</p>
+        </div>
+      )}
 
       {/* Description */}
       {calc.description && (

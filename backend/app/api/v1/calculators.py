@@ -427,6 +427,40 @@ async def get_related(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     ]
 
 
+@router.get("/{calc_id}/price-guide")
+async def price_guide(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Return crowdsourced pricing data from owned collection entries."""
+    result = await db.execute(
+        select(CollectionEntry.acquired_price, CollectionEntry.updated_at)
+        .where(
+            CollectionEntry.calculator_id == calc_id,
+            CollectionEntry.status == "owned",
+            CollectionEntry.acquired_price.is_not(None),
+            CollectionEntry.acquired_price > 0,
+        )
+        .order_by(CollectionEntry.updated_at.desc())
+        .limit(50)
+    )
+    rows = result.all()
+    if not rows:
+        return {"count": 0, "avg": None, "min": None, "max": None, "median": None, "recent": []}
+
+    prices = sorted(r.acquired_price for r in rows)
+    n = len(prices)
+    median_val = prices[n // 2] if n % 2 == 1 else (prices[n // 2 - 1] + prices[n // 2]) / 2
+    return {
+        "count": n,
+        "avg": round(sum(prices) / n, 2),
+        "min": prices[0],
+        "max": prices[-1],
+        "median": round(median_val, 2),
+        "recent": [
+            {"price": r.acquired_price, "date": r.updated_at.isoformat()}
+            for r in rows[:5]
+        ],
+    }
+
+
 @router.get("/{calc_id}/variants", response_model=list[CalculatorPublic])
 async def get_variants(calc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     """Return all variant/colorway entries for a given parent calculator."""
