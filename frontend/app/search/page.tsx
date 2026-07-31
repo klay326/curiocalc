@@ -76,9 +76,15 @@ function SearchContent() {
       )}
 
       {!loading && q && !hasResults && (
-        <p className="text-center text-zinc-600 font-mono text-sm py-16">
-          No results for &ldquo;{q}&rdquo;
-        </p>
+        <div className="text-center py-16">
+          <p className="text-zinc-600 font-mono text-sm mb-4">No results for &ldquo;{q}&rdquo;</p>
+          <Link
+            href={`/request?make=${encodeURIComponent(q)}`}
+            className="inline-block text-xs font-mono bg-zinc-900 border border-zinc-700 hover:border-amber-400/50 text-zinc-400 hover:text-amber-400 px-4 py-2 rounded-xl transition-colors"
+          >
+            + Request &ldquo;{q}&rdquo; be added →
+          </Link>
+        </div>
       )}
 
       {!loading && !q && (

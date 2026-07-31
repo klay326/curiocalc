@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission, type Report } from '@/lib/api';
+import { api, type Calculator, type CalcRequest, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission, type Report } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
@@ -10,7 +10,7 @@ const CALC_TYPES = ['scientific','graphing','financial','programmable','databank
 export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge' | 'import' | 'submissions' | 'reports'>('stats');
+  const [tab, setTab] = useState<'stats' | 'calcs' | 'suggestions' | 'photos' | 'users' | 'merge' | 'import' | 'submissions' | 'reports' | 'requests'>('stats');
 
   useEffect(() => {
     if (!authLoading && (!user || !user.is_superuser)) router.replace('/');
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
-        {(['stats', 'calcs', 'users', 'submissions', 'reports', 'suggestions', 'photos', 'merge', 'import'] as const).map(t => (
+        {(['stats', 'calcs', 'users', 'submissions', 'requests', 'reports', 'suggestions', 'photos', 'merge', 'import'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors capitalize ${
               tab === t ? 'bg-zinc-700 text-zinc-100 font-bold' : 'text-zinc-500 hover:text-zinc-300'
@@ -53,6 +53,7 @@ export default function AdminPage() {
        : tab === 'import'     ? <ImportTab />
        : tab === 'submissions' ? <SubmissionsTab />
        : tab === 'reports'    ? <ReportsTab />
+       : tab === 'requests'   ? <RequestsTab />
        : <SuggestionsTab />}
     </div>
   );
@@ -63,13 +64,27 @@ function StatsTab() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{ configured: boolean; smtp_user: string | null } | null>(null);
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     api.admin.stats()
       .then(setStats)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+    api.admin.emailStatus().then(setEmailStatus).catch(() => {});
   }, []);
+
+  const sendTest = async () => {
+    setTestSending(true); setTestResult(null);
+    try {
+      await api.digest.sendMe();
+      setTestResult('✓ Sent! Check your inbox.');
+    } catch (e) {
+      setTestResult(`✗ ${e instanceof Error ? e.message : 'Failed'}`);
+    } finally { setTestSending(false); }
+  };
 
   if (loading) return <div className="text-zinc-600 font-mono text-sm animate-pulse py-8">Loading stats…</div>;
   if (error)   return <div className="text-red-400 font-mono text-sm py-4">Error: {error}</div>;
@@ -80,6 +95,36 @@ function StatsTab() {
 
   return (
     <div className="space-y-8">
+      {/* SMTP status */}
+      {emailStatus && (
+        <div className={`border rounded-xl p-4 flex items-center gap-4 ${
+          emailStatus.configured
+            ? 'bg-green-950/20 border-green-900/40'
+            : 'bg-amber-950/20 border-amber-900/40'
+        }`}>
+          <span className="text-xl">{emailStatus.configured ? '✉️' : '⚠️'}</span>
+          <div className="flex-1">
+            <p className={`font-mono text-xs font-bold ${emailStatus.configured ? 'text-green-400' : 'text-amber-400'}`}>
+              {emailStatus.configured ? `Email configured — ${emailStatus.smtp_user}` : 'Email not configured'}
+            </p>
+            {!emailStatus.configured && (
+              <p className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                Set SMTP_USER and SMTP_PASSWORD in <code>/opt/curiocalc/.env</code> to enable digest emails.
+              </p>
+            )}
+          </div>
+          {emailStatus.configured && (
+            <div className="flex items-center gap-2">
+              <button onClick={sendTest} disabled={testSending}
+                className="text-xs font-mono px-3 py-1.5 bg-zinc-800 border border-zinc-700 hover:border-green-900/60 text-zinc-300 hover:text-green-400 rounded-lg transition-colors disabled:opacity-50">
+                {testSending ? '…' : 'Send test'}
+              </button>
+              {testResult && <span className={`text-[10px] font-mono ${testResult.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>{testResult}</span>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* User Stats */}
       <section>
         <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3 border-b border-zinc-800 pb-2">👥 Users</h2>
@@ -1433,5 +1478,101 @@ function SubmissionsTab() {
         </div>
       ))}
     </div>
+  );
+}
+
+/* ────────────────────────────────── Requests tab ── */
+function RequestsTab() {
+  const [requests, setRequests] = useState<CalcRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'pending' | 'fulfilled' | 'declined' | ''>('pending');
+  const [acting, setActing] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setRequests(await api.admin.calcRequests(filter || undefined)); }
+    finally { setLoading(false); }
+  }, [filter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const update = async (id: string, status: string) => {
+    setActing(id);
+    try {
+      const updated = await api.admin.updateCalcRequest(id, status);
+      setRequests(prev => filter ? prev.filter(r => r.id !== id) : prev.map(r => r.id === id ? updated : r));
+    } catch { /* ignore */ }
+    finally { setActing(null); }
+  };
+
+  const pending = requests.filter(r => r.status === 'pending');
+
+  return (
+    <>
+      <div className="flex gap-2 mb-6">
+        {(['pending', 'fulfilled', 'declined', ''] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
+              filter === f
+                ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold'
+                : 'text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-300'
+            }`}>
+            {f || 'all'}
+            {f === 'pending' && pending.length > 0 && (
+              <span className="ml-1.5 bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">{pending.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="text-zinc-600 font-mono text-sm animate-pulse">Loading…</div>
+      ) : requests.length === 0 ? (
+        <div className="text-center py-16 text-zinc-600 font-mono text-sm">
+          <div className="text-4xl mb-3">📬</div>
+          No requests in this queue.
+        </div>
+      ) : (
+        <div className="space-y-3 max-w-3xl">
+          {requests.map(r => (
+            <div key={r.id} className={`bg-zinc-900 border rounded-xl p-4 ${
+              r.status === 'pending' ? 'border-amber-900/40' :
+              r.status === 'fulfilled' ? 'border-green-900/40' : 'border-zinc-800'
+            }`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-mono font-bold text-zinc-100 text-sm">{r.make} {r.model}</p>
+                  <p className="text-[10px] font-mono text-zinc-600 mt-0.5">
+                    {r.year ? `${r.year} · ` : ''}{new Date(r.created_at).toLocaleDateString()}
+                  </p>
+                  {r.notes && (
+                    <p className="text-xs font-mono text-zinc-500 mt-2 italic">"{r.notes}"</p>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className={`text-[9px] px-2 py-0.5 rounded font-mono font-bold ${
+                    r.status === 'pending'   ? 'bg-amber-900/30 text-amber-400' :
+                    r.status === 'fulfilled' ? 'bg-green-900/30 text-green-400' :
+                                               'bg-zinc-800 text-zinc-500'
+                  }`}>{r.status}</span>
+                  {r.status === 'pending' && (
+                    <div className="flex gap-2">
+                      <button onClick={() => update(r.id, 'fulfilled')} disabled={acting === r.id}
+                        className="text-xs font-mono px-2.5 py-1 bg-green-900/40 text-green-400 border border-green-900/50 rounded-lg hover:bg-green-900/60 transition-colors disabled:opacity-50">
+                        {acting === r.id ? '…' : '✓ fulfilled'}
+                      </button>
+                      <button onClick={() => update(r.id, 'declined')} disabled={acting === r.id}
+                        className="text-xs font-mono px-2.5 py-1 bg-red-900/20 text-red-400 border border-red-900/30 rounded-lg hover:bg-red-900/30 transition-colors disabled:opacity-50">
+                        ✕ decline
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { AuthProvider } from '@/lib/auth';
 import { ThemeProvider } from '@/lib/theme';
 import { Nav } from '@/components/nav';
 import { PushRegistration } from '@/components/push-registration';
+import { ServiceWorkerRegistration } from '@/components/service-worker';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <AuthProvider>
             <PushRegistration />
+            <ServiceWorkerRegistration />
             <Nav />
             <main>{children}</main>
           </AuthProvider>

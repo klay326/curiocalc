@@ -381,6 +381,8 @@ export function Nav() {
     { href: '/compare', label: 'Compare' },
     { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },
+    { href: '/request', label: 'Request a calc' },
+    { href: '/docs', label: 'API docs' },
     { href: '/stats', label: 'Site stats' },
   ];
 
@@ -395,6 +397,8 @@ export function Nav() {
     { href: '/compare', label: 'Compare calcs' },
     { href: '/collector-compare', label: 'Compare collectors' },
     { href: '/contribute', label: 'Contribute' },
+    { href: '/request', label: 'Request a calc' },
+    { href: '/docs', label: 'API docs' },
     { href: '/stats', label: 'Site stats' },
   ];
 

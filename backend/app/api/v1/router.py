@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     admin,
     auth,
+    calc_requests,
     calculators,
     collections,
     comments,
@@ -35,3 +36,4 @@ api_router.include_router(trade_offers.router)
 api_router.include_router(digest.router)
 api_router.include_router(reports.router)
 api_router.include_router(devices.router)
+api_router.include_router(calc_requests.router)

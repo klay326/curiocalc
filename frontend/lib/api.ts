@@ -384,6 +384,16 @@ export type PriceGuide = {
   recent: { price: number; date: string }[];
 };
 
+export type CalcRequest = {
+  id: string;
+  make: string;
+  model: string;
+  year: number | null;
+  notes: string | null;
+  status: 'pending' | 'fulfilled' | 'declined';
+  created_at: string;
+};
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('access_token');
@@ -685,6 +695,16 @@ export const api = {
       request<Calculator>(`/api/v1/admin/calculators/${id}/approve`, { method: 'POST' }),
     rejectSubmission: (id: string) =>
       request<void>(`/api/v1/admin/calculators/${id}/reject`, { method: 'POST' }),
+    emailStatus: () => request<{ configured: boolean; smtp_host: string | null; smtp_user: string | null }>('/api/v1/admin/email-status'),
+    calcRequests: (status?: string) =>
+      request<CalcRequest[]>(`/api/v1/calc-requests/admin${status ? `?status=${status}` : ''}`),
+    updateCalcRequest: (id: string, status: string) =>
+      request<CalcRequest>(`/api/v1/calc-requests/admin/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  },
+
+  calcRequests: {
+    create: (data: { make: string; model: string; year?: number | null; notes?: string | null }) =>
+      request<CalcRequest>('/api/v1/calc-requests', { method: 'POST', body: JSON.stringify(data) }),
   },
 
   comments: {

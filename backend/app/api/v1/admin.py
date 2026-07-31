@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_superuser, get_db
 from app.cache import cache_del, cache_incr
+from app.config import settings
 from app.models.calculator import Calculator
 from app.models.collection import CollectionEntry
 from app.models.comment import Comment
@@ -522,3 +523,14 @@ async def reject_submission(
     calc.status = "rejected"
     await db.commit()
     return Response(status_code=204)
+
+
+@router.get("/email-status")
+async def email_status(_: User = Depends(get_current_superuser)):
+    """Return whether SMTP is configured and what sender address is set."""
+    configured = bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
+    return {
+        "configured": configured,
+        "smtp_host": settings.SMTP_HOST or None,
+        "smtp_user": settings.SMTP_USER or None,
+    }

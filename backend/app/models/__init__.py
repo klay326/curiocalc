@@ -1,3 +1,4 @@
+from app.models.calc_request import CalculatorRequest
 from app.models.calculator import Calculator
 from app.models.calculator_like import CalculatorLike
 from app.models.calculator_vote import CalculatorVote
@@ -18,4 +19,5 @@ __all__ = [
     "CollectionEntry", "CollectionStatus", "Condition", "Visibility",
     "EditSuggestion", "Comment", "CommentLike",
     "Follow", "Notification", "ImageSubmission", "TradeOffer", "Report", "DeviceToken",
+    "CalculatorRequest",
 ]
