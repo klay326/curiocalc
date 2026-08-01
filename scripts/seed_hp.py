@@ -3,7 +3,8 @@
 Comprehensive HP calculator seed — adds all major HP models missing from the DB.
 Run: docker exec curiocalc-backend-1 python /app/seed_hp.py
 """
-import asyncio, os, sys
+import asyncio, os, sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://curiocalc:changeme@localhost:5432/curiocalc")
 
 HP_CALCS = [
@@ -192,58 +193,56 @@ HP_CALCS = [
 
 
 async def main():
-    if "asyncpg" not in DATABASE_URL:
-        url = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-    else:
-        url = DATABASE_URL
+    engine_url = DATABASE_URL
+    if "asyncpg" not in engine_url:
+        engine_url = engine_url.replace("postgresql://", "postgresql+asyncpg://")
 
-    import asyncpg
-    url_pg = url.replace("postgresql+asyncpg://", "postgresql://")
-    conn = await asyncpg.connect(url_pg)
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import select
+    from app.models.calculator import Calculator
+
+    engine = create_async_engine(engine_url, echo=False)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     added, skipped = 0, 0
-    for calc in HP_CALCS:
-        # Check if already exists
-        existing = await conn.fetchval(
-            "SELECT id FROM calculators WHERE make='HP' AND model=$1", calc["model"]
-        )
-        if existing:
-            skipped += 1
-            continue
-
-        import uuid, json
-        tags = calc.pop("tags", [])
-        fun_facts = calc.pop("fun_facts", None)
-        rarity = calc.pop("rarity_score", None)
-
-        await conn.execute("""
-            INSERT INTO calculators (
-                id, make, model, year_introduced, year_discontinued, calc_type,
-                display_type, power_source, num_keys, country_of_origin,
-                fun_facts, rarity_score, tags, images, external_refs,
-                is_verified, created_at, updated_at
-            ) VALUES (
-                $1,'HP',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,'[]'::json,'[]'::json,
-                false, NOW(), NOW()
+    async with async_session() as session:
+        for data in HP_CALCS:
+            exists = await session.execute(
+                select(Calculator).where(
+                    Calculator.make == "HP",
+                    Calculator.model == data["model"],
+                ).limit(1)
             )
-        """,
-            uuid.uuid4(),
-            calc["model"],
-            calc.get("year_introduced"),
-            calc.get("year_discontinued"),
-            calc.get("calc_type", "scientific"),
-            calc.get("display_type"),
-            calc.get("power_source"),
-            calc.get("num_keys"),
-            calc.get("country_of_origin"),
-            fun_facts,
-            rarity,
-            json.dumps(tags),
-        )
-        added += 1
-        print(f"  ✓ Added: HP {calc['model']}")
+            if exists.scalar_one_or_none():
+                skipped += 1
+                continue
 
-    await conn.close()
+            calc = Calculator(
+                make="HP",
+                model=data["model"],
+                year_introduced=data.get("year_introduced"),
+                year_discontinued=data.get("year_discontinued"),
+                calc_type=data.get("calc_type", "scientific"),
+                display_type=data.get("display_type"),
+                power_source=data.get("power_source"),
+                num_keys=data.get("num_keys"),
+                country_of_origin=data.get("country_of_origin"),
+                fun_facts=data.get("fun_facts"),
+                tags=data.get("tags", []),
+                rarity_score=data.get("rarity_score"),
+                images=[],
+                external_refs=[],
+                is_verified=False,
+                status="pending",
+            )
+            session.add(calc)
+            print(f"  ✓ HP {data['model']}")
+            added += 1
+
+        await session.commit()
+
+    await engine.dispose()
     print(f"\n✅ Added {added} HP calculators, skipped {skipped} already present")
 
 if __name__ == "__main__":

@@ -718,7 +718,7 @@ async def seed():
                 select(Calculator).where(
                     Calculator.make == data["make"],
                     Calculator.model == data["model"],
-                )
+                ).limit(1)
             )
             if exists.scalar_one_or_none():
                 print(f"  skip (exists): {data['make']} {data['model']}")
@@ -740,9 +740,10 @@ async def seed():
                 tags=data.get("tags", []),
                 rarity_score=data.get("rarity_score"),
                 weirdness_score=data.get("weirdness_score"),
-                images=data.get("images", []),
+                images=[],
                 external_refs=[],
-                is_verified=True,
+                is_verified=False,
+                status="pending",
             )
             session.add(calc)
             print(f"  + {data['make']} {data['model']} ({data.get('year_introduced', '?')})")

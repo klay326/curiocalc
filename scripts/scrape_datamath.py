@@ -407,6 +407,7 @@ async def parse_calc_page(client: httpx.AsyncClient, url: str, album_type: str) 
         "weirdness_score": weirdness,
         "images": [],
         "external_refs": [{"label": "Datamath Museum", "url": url}],
+        "status": "pending",
     }
 
 
@@ -481,7 +482,7 @@ async def seed_to_db(calcs: list[dict]):
                         Calculator.make == data["make"],
                         Calculator.model == data["model"],
                     )
-                )
+                ).limit(1)
             )
             if result.scalar_one_or_none():
                 skipped += 1
