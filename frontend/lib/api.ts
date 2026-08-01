@@ -94,10 +94,23 @@ export type UserSearchEntry = {
   is_following: boolean;
 };
 
+export type CollectionGoal = {
+  id: string;
+  title: string;
+  description: string | null;
+  calc_ids: string[];
+  target_count: number;
+  owned_count: number;
+  progress: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
 export type UserCollectionStats = {
   owned_count: number;
   wanted_count: number;
   total_value: number | null;
+  market_value: number | null;
   avg_price: number | null;
   brand_counts: Record<string, number>;
   decade_counts: Record<string, number>;
@@ -792,5 +805,14 @@ export const api = {
     unreadCount: () => request<number>('/api/v1/notifications/unread-count').then((r: unknown) => (r as { count: number }).count),
     markRead: () => request<void>('/api/v1/notifications/mark-read', { method: 'POST' }),
     dismiss: (id: string) => request<void>(`/api/v1/notifications/${id}`, { method: 'DELETE' }),
+  },
+
+  goals: {
+    list: () => request<CollectionGoal[]>('/api/v1/collection-goals'),
+    create: (data: { title: string; description?: string; calc_ids?: string[] }) =>
+      request<CollectionGoal>('/api/v1/collection-goals', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { title?: string; description?: string; calc_ids?: string[]; completed?: boolean }) =>
+      request<CollectionGoal>(`/api/v1/collection-goals/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/api/v1/collection-goals/${id}`, { method: 'DELETE' }),
   },
 };

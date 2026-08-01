@@ -85,12 +85,25 @@ export default function UserStatsPage() {
               sub={stats.avg_price ? `avg $${stats.avg_price}` : undefined} />
           : <StatTile label="Total spent" value="—" sub="prices not shared" />
         }
-        <StatTile
-          label="Avg rarity"
-          value={stats.avg_rarity != null ? `${stats.avg_rarity}/10` : '—'}
-          sub={stats.avg_weirdness != null ? `weird ${stats.avg_weirdness}/10` : undefined}
-        />
+        {stats.market_value != null
+          ? <StatTile label="Est. market value" value={`$${stats.market_value.toLocaleString()}`}
+              sub="based on price guides" />
+          : <StatTile
+              label="Avg rarity"
+              value={stats.avg_rarity != null ? `${stats.avg_rarity}/10` : '—'}
+              sub={stats.avg_weirdness != null ? `weird ${stats.avg_weirdness}/10` : undefined}
+            />
+        }
       </div>
+      {stats.market_value != null && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <StatTile
+            label="Avg rarity"
+            value={stats.avg_rarity != null ? `${stats.avg_rarity}/10` : '—'}
+            sub={stats.avg_weirdness != null ? `weird ${stats.avg_weirdness}/10` : undefined}
+          />
+        </div>
+      )}
 
       {/* Brands */}
       {Object.keys(stats.brand_counts).length > 0 && (

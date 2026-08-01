@@ -1,5 +1,6 @@
 import asyncio
-from collections import Counter
+from collections import Counter, defaultdict
+from statistics import median as _median
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func, select
@@ -260,10 +261,29 @@ async def get_user_stats(
     rarity_scores = [c.rarity_score for _, c in owned if c.rarity_score is not None]
     weirdness_scores = [c.weirdness_score for _, c in owned if c.weirdness_score is not None]
 
+    # Market value: median acquired_price per owned calc across ALL collectors, summed
+    owned_calc_ids = [c.id for _, c in owned]
+    market_value = None
+    if owned_calc_ids:
+        market_prices_r = await db.execute(
+            select(CollectionEntry.calculator_id, CollectionEntry.acquired_price)
+            .where(
+                CollectionEntry.calculator_id.in_(owned_calc_ids),
+                CollectionEntry.status == "owned",
+                CollectionEntry.acquired_price.isnot(None),
+            )
+        )
+        prices_by_calc: dict = defaultdict(list)
+        for cid, price in market_prices_r.all():
+            prices_by_calc[cid].append(price)
+        if prices_by_calc:
+            market_value = round(sum(_median(ps) for ps in prices_by_calc.values()), 2)
+
     return {
         "owned_count": len(owned),
         "wanted_count": len(wanted),
         "total_value": round(sum(prices), 2) if prices else None,
+        "market_value": market_value,
         "avg_price": round(sum(prices) / len(prices), 2) if prices else None,
         "brand_counts": dict(brand_counts.most_common(15)),
         "decade_counts": dict(sorted(decade_counts.items())),

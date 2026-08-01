@@ -5,6 +5,7 @@ from app.api.v1 import (
     auth,
     calc_requests,
     calculators,
+    collection_goals,
     collections,
     comments,
     devices,
@@ -37,3 +38,4 @@ api_router.include_router(digest.router)
 api_router.include_router(reports.router)
 api_router.include_router(devices.router)
 api_router.include_router(calc_requests.router)
+api_router.include_router(collection_goals.router)
