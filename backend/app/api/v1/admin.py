@@ -525,6 +525,46 @@ async def reject_submission(
     return Response(status_code=204)
 
 
+@router.post("/submissions/bulk-approve", response_model=dict)
+async def bulk_approve_submissions(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    ids = [uuid.UUID(i) for i in payload.get("ids", [])]
+    if not ids:
+        return {"approved": 0}
+    result = await db.execute(
+        select(Calculator).where(Calculator.id.in_(ids), Calculator.status == "pending")
+    )
+    calcs = result.scalars().all()
+    for calc in calcs:
+        calc.status = "approved"
+    await db.commit()
+    await cache_incr("calcs:v")
+    await cache_del("calcs:brands", "calcs:makes", "calcs:tags")
+    return {"approved": len(calcs)}
+
+
+@router.post("/submissions/bulk-reject", response_model=dict)
+async def bulk_reject_submissions(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    ids = [uuid.UUID(i) for i in payload.get("ids", [])]
+    if not ids:
+        return {"rejected": 0}
+    result = await db.execute(
+        select(Calculator).where(Calculator.id.in_(ids), Calculator.status == "pending")
+    )
+    calcs = result.scalars().all()
+    for calc in calcs:
+        calc.status = "rejected"
+    await db.commit()
+    return {"rejected": len(calcs)}
+
+
 @router.get("/email-status")
 async def email_status(_: User = Depends(get_current_superuser)):
     """Return whether SMTP is configured and what sender address is set."""

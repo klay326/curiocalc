@@ -244,12 +244,12 @@ export default function CalculatorPage() {
 
   const stats = [
     { label: 'Type',    value: calc.calc_type },
-    { label: 'Display', value: calc.display_type || '—' },
-    { label: 'Power',   value: calc.power_source || '—' },
-    { label: 'Keys',    value: calc.num_keys != null ? String(calc.num_keys) : '—' },
-    { label: 'Country', value: calc.country_of_origin || '—' },
+    { label: 'Display', value: calc.display_type || null },
+    { label: 'Power',   value: calc.power_source || null },
+    { label: 'Keys',    value: calc.num_keys != null ? String(calc.num_keys) : null },
+    { label: 'Country', value: calc.country_of_origin || null },
     { label: 'Owners',  value: `${calc.owner_count} own · ${calc.want_count} want` },
-  ];
+  ].filter(s => s.value !== null) as { label: string; value: string }[];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">

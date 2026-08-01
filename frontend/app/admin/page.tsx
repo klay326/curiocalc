@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, type Calculator, type CalcRequest, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission, type Report } from '@/lib/api';
@@ -1335,67 +1335,67 @@ function ImportTab() {
 function SubmissionsTab() {
   const [calcs, setCalcs] = useState<Calculator[]>([]);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkActing, setBulkActing] = useState(false);
+  const [acting, setActing] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [filterMake, setFilterMake] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
+    setError(null);
     api.admin.pendingSubmissions()
       .then(setCalcs)
-      .catch(() => {})
+      .catch(e => setError(e?.message || 'Failed to load submissions'))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleSelect = (id: string) => setSelected(prev => {
-    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
-  });
-  const selectAll = () => setSelected(new Set(calcs.map(c => c.id)));
-  const clearSelected = () => setSelected(new Set());
+  const makes = useMemo(() => [...new Set(calcs.map(c => c.make))].sort(), [calcs]);
 
-  const approve = async (id: string) => {
-    setActing(id);
-    try {
-      await api.admin.approveSubmission(id);
-      setCalcs(prev => prev.filter(c => c.id !== id));
-      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
-    } catch { /* ignore */ }
-    finally { setActing(null); }
-  };
+  const filtered = useMemo(() => calcs.filter(c => {
+    if (filterMake && c.make !== filterMake) return false;
+    if (search) return `${c.make} ${c.model}`.toLowerCase().includes(search.toLowerCase());
+    return true;
+  }), [calcs, filterMake, search]);
 
-  const reject = async (id: string) => {
-    setActing(id);
-    try {
-      await api.admin.rejectSubmission(id);
-      setCalcs(prev => prev.filter(c => c.id !== id));
-      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
-    } catch { /* ignore */ }
-    finally { setActing(null); }
-  };
+  const grouped = useMemo(() => {
+    const g: Record<string, Calculator[]> = {};
+    for (const c of filtered) {
+      if (!g[c.make]) g[c.make] = [];
+      g[c.make].push(c);
+    }
+    return Object.entries(g).sort((a, b) => b[1].length - a[1].length);
+  }, [filtered]);
 
-  const bulkApprove = async () => {
-    setBulkActing(true);
-    const ids = [...selected];
-    await Promise.all(ids.map(id => api.admin.approveSubmission(id).catch(() => {})));
+  const setActingIds = (ids: string[], on: boolean) =>
+    setActing(prev => { const n = new Set(prev); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
+
+  const approveMany = async (ids: string[]) => {
+    setActingIds(ids, true);
+    await api.admin.bulkApprove(ids).catch(() => {});
     setCalcs(prev => prev.filter(c => !ids.includes(c.id)));
-    clearSelected();
-    setBulkActing(false);
+    setActingIds(ids, false);
   };
 
-  const bulkReject = async () => {
-    if (!confirm(`Reject ${selected.size} submissions?`)) return;
-    setBulkActing(true);
-    const ids = [...selected];
-    await Promise.all(ids.map(id => api.admin.rejectSubmission(id).catch(() => {})));
+  const rejectMany = async (ids: string[]) => {
+    setActingIds(ids, true);
+    await api.admin.bulkReject(ids).catch(() => {});
     setCalcs(prev => prev.filter(c => !ids.includes(c.id)));
-    clearSelected();
-    setBulkActing(false);
+    setActingIds(ids, false);
   };
+
+  const toggleCollapse = (make: string) =>
+    setCollapsed(prev => { const n = new Set(prev); n.has(make) ? n.delete(make) : n.add(make); return n; });
 
   if (loading) return <div className="text-zinc-600 font-mono text-sm animate-pulse py-8">Loading…</div>;
-
+  if (error) return (
+    <div className="py-8 text-center">
+      <p className="text-red-400 font-mono text-sm mb-3">{error}</p>
+      <button onClick={load} className="text-xs font-mono text-zinc-500 hover:text-zinc-300">Retry</button>
+    </div>
+  );
   if (calcs.length === 0) return (
     <div className="text-center py-16">
       <p className="text-zinc-600 font-mono text-sm">No pending submissions</p>
@@ -1403,80 +1403,104 @@ function SubmissionsTab() {
   );
 
   return (
-    <div className="space-y-3 max-w-3xl">
-      <div className="flex items-center gap-3 flex-wrap mb-4">
-        <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">{calcs.length} pending</p>
-        {selected.size === 0 ? (
-          <button onClick={selectAll} className="text-[11px] font-mono text-zinc-600 hover:text-zinc-400 transition-colors">
-            Select all
-          </button>
-        ) : (
-          <>
-            <span className="text-xs font-mono text-zinc-400">{selected.size} selected</span>
-            <button onClick={bulkApprove} disabled={bulkActing}
-              className="text-xs font-mono px-2.5 py-1 rounded bg-green-900/40 text-green-400 border border-green-900/50 hover:bg-green-900/60 transition-colors disabled:opacity-50">
-              ✓ Approve all
-            </button>
-            <button onClick={bulkReject} disabled={bulkActing}
-              className="text-xs font-mono px-2.5 py-1 rounded bg-red-900/20 text-red-400 border border-red-900/30 hover:bg-red-900/30 transition-colors disabled:opacity-50">
-              ✕ Reject all
-            </button>
-            <button onClick={clearSelected} className="text-xs font-mono text-zinc-600 hover:text-zinc-300">✕ Clear</button>
-          </>
+    <div className="space-y-4 max-w-4xl">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">{calcs.length} pending</span>
+        <input
+          type="search"
+          placeholder="Search model…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 w-44"
+        />
+        <select
+          value={filterMake}
+          onChange={e => setFilterMake(e.target.value)}
+          className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 focus:outline-none focus:border-zinc-600"
+        >
+          <option value="">All brands</option>
+          {makes.map(m => (
+            <option key={m} value={m}>{m} ({calcs.filter(c => c.make === m).length})</option>
+          ))}
+        </select>
+        {(search || filterMake) && (
+          <button onClick={() => { setSearch(''); setFilterMake(''); }}
+            className="text-xs font-mono text-zinc-600 hover:text-zinc-300">✕ clear</button>
         )}
       </div>
-      {calcs.map(calc => (
-        <div key={calc.id} className={`bg-zinc-900 border rounded-xl p-4 flex items-start gap-3 ${
-          selected.has(calc.id) ? 'border-amber-900/40' : 'border-zinc-800'
-        }`}>
-          <input type="checkbox" checked={selected.has(calc.id)} onChange={() => toggleSelect(calc.id)}
-            className="accent-amber-400 mt-1 flex-shrink-0" />
-          <div className="w-14 h-14 flex-shrink-0 rounded-lg bg-zinc-800 overflow-hidden flex items-center justify-center">
-            {calc.images[0]
-              ? <img src={calc.images[0]} alt="" className="w-full h-full object-contain" />
-              : <span className="text-2xl opacity-20">🧮</span>}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <p className="font-mono font-bold text-zinc-100 text-sm">{calc.make} {calc.model}</p>
-              {calc.is_verified && (
-                <span className="text-[9px] font-mono bg-amber-900/30 text-amber-400 border border-amber-900/40 px-1.5 py-0.5 rounded">verified</span>
-              )}
-            </div>
-            <p className="text-[11px] font-mono text-zinc-500">
-              {calc.calc_type}{calc.year_introduced ? ` · ${calc.year_introduced}` : ''}{calc.country_of_origin ? ` · ${calc.country_of_origin}` : ''}
-            </p>
-            {calc.description && (
-              <p className="text-[11px] font-mono text-zinc-600 mt-1 line-clamp-2">{calc.description}</p>
-            )}
-            {calc.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {calc.tags.map(t => (
-                  <span key={t} className="text-[9px] font-mono bg-zinc-800 text-zinc-500 border border-zinc-700 px-1.5 py-0.5 rounded">#{t}</span>
-                ))}
+
+      {/* Brand groups */}
+      {grouped.map(([make, makeCalcs]) => {
+        const isCollapsed = collapsed.has(make);
+        const isBusy = makeCalcs.some(c => acting.has(c.id));
+        return (
+          <div key={make} className="border border-zinc-800 rounded-xl overflow-hidden">
+            {/* Group header */}
+            <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900/80">
+              <button onClick={() => toggleCollapse(make)}
+                className="text-zinc-500 text-[10px] w-4 text-left select-none">
+                {isCollapsed ? '▶' : '▼'}
+              </button>
+              <span className="font-mono font-bold text-zinc-200 text-sm">{make}</span>
+              <span className="text-[11px] font-mono text-zinc-500">{makeCalcs.length} calcs</span>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => approveMany(makeCalcs.map(c => c.id))}
+                  disabled={isBusy}
+                  className="text-xs font-mono px-2.5 py-1 rounded bg-green-900/40 text-green-400 border border-green-900/50 hover:bg-green-900/60 transition-colors disabled:opacity-40"
+                >
+                  ✓ Approve all {make}
+                </button>
+                <button
+                  onClick={() => { if (confirm(`Reject all ${makeCalcs.length} ${make} submissions?`)) rejectMany(makeCalcs.map(c => c.id)); }}
+                  disabled={isBusy}
+                  className="text-xs font-mono px-2.5 py-1 rounded bg-red-900/20 text-red-400 border border-red-900/30 hover:bg-red-900/30 transition-colors disabled:opacity-40"
+                >
+                  ✕ Reject all
+                </button>
               </div>
+            </div>
+
+            {/* Compact table */}
+            {!isCollapsed && (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-t border-b border-zinc-800 text-zinc-600 text-[10px] font-mono uppercase tracking-wider">
+                    <th className="text-left px-4 py-2">Model</th>
+                    <th className="text-left px-3 py-2 hidden sm:table-cell">Type</th>
+                    <th className="text-left px-3 py-2 hidden sm:table-cell">Year</th>
+                    <th className="text-left px-3 py-2 hidden md:table-cell">Country</th>
+                    <th className="px-3 py-2 w-20"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {makeCalcs.map(c => (
+                    <tr key={c.id}
+                      className={`border-b border-zinc-800/40 hover:bg-zinc-800/20 text-xs font-mono transition-opacity ${acting.has(c.id) ? 'opacity-30' : ''}`}
+                    >
+                      <td className="px-4 py-2 text-zinc-200 font-bold">{c.model}</td>
+                      <td className="px-3 py-2 text-zinc-500 hidden sm:table-cell">{c.calc_type || '—'}</td>
+                      <td className="px-3 py-2 text-zinc-500 hidden sm:table-cell">{c.year_introduced || '—'}</td>
+                      <td className="px-3 py-2 text-zinc-500 hidden md:table-cell">{c.country_of_origin || '—'}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-end gap-3">
+                          <Link href={`/calculators/${c.id}`} target="_blank"
+                            className="text-zinc-600 hover:text-amber-400 transition-colors" title="Preview">↗</Link>
+                          <button onClick={() => approveMany([c.id])} disabled={acting.has(c.id)}
+                            className="text-green-500 hover:text-green-300 transition-colors disabled:opacity-30 font-bold" title="Approve">✓</button>
+                          <button onClick={() => rejectMany([c.id])} disabled={acting.has(c.id)}
+                            className="text-red-500 hover:text-red-300 transition-colors disabled:opacity-30" title="Reject">✕</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
-          <div className="flex flex-col gap-2 flex-shrink-0">
-            <Link href={`/calculators/${calc.id}`} target="_blank"
-              className="text-[10px] font-mono text-zinc-500 hover:text-amber-400 transition-colors text-right">preview ↗</Link>
-            <button
-              onClick={() => approve(calc.id)}
-              disabled={acting === calc.id || bulkActing}
-              className="px-3 py-1.5 bg-green-900/40 text-green-400 border border-green-900/50 rounded-lg font-mono text-xs font-bold hover:bg-green-900/60 transition-colors disabled:opacity-50"
-            >
-              {acting === calc.id ? '…' : '✓ approve'}
-            </button>
-            <button
-              onClick={() => reject(calc.id)}
-              disabled={acting === calc.id || bulkActing}
-              className="px-3 py-1.5 bg-red-950/30 text-red-400 border border-red-900/30 rounded-lg font-mono text-xs hover:bg-red-900/20 transition-colors disabled:opacity-50"
-            >
-              ✕ reject
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

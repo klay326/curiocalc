@@ -230,9 +230,10 @@ async def get_random(db: AsyncSession = Depends(get_db)):
 @router.get("/daily", response_model=CalculatorPublic)
 async def get_daily(db: AsyncSession = Depends(get_db)):
     """Return the featured calc if one is pinned, else the daily rotating pick."""
+    APPROVED = (Calculator.status == "approved")
     # Prefer admin-pinned calc
     featured_r = await db.execute(
-        select(Calculator).where(Calculator.is_featured.is_(True)).limit(1)
+        select(Calculator).where(APPROVED, Calculator.is_featured.is_(True)).limit(1)
     )
     calc = featured_r.scalar_one_or_none()
 
@@ -240,13 +241,13 @@ async def get_daily(db: AsyncSession = Depends(get_db)):
         from datetime import date as _date
         day_num = (_date.today() - _date(2024, 1, 1)).days
         count_r = await db.execute(
-            select(func.count(Calculator.id)).where(Calculator.parent_id.is_(None))
+            select(func.count(Calculator.id)).where(APPROVED, Calculator.parent_id.is_(None))
         )
         total = count_r.scalar() or 1
         offset = day_num % total
         result = await db.execute(
             select(Calculator)
-            .where(Calculator.parent_id.is_(None))
+            .where(APPROVED, Calculator.parent_id.is_(None))
             .order_by(Calculator.id)
             .offset(offset)
             .limit(1)
@@ -265,10 +266,11 @@ async def list_brands(db: AsyncSession = Depends(get_db)):
     if hit is not None:
         return hit
 
-    # Counts in one query
+    APPROVED = Calculator.status == "approved"
+    # Counts in one query (approved only)
     count_r = await db.execute(
         select(Calculator.make, func.count(Calculator.id).label("count"))
-        .where(Calculator.parent_id.is_(None))
+        .where(APPROVED, Calculator.parent_id.is_(None))
         .group_by(Calculator.make)
         .order_by(func.count(Calculator.id).desc())
     )
@@ -282,6 +284,7 @@ async def list_brands(db: AsyncSession = Depends(get_db)):
         select(Calculator.make, Calculator.images, Calculator.model)
         .distinct(Calculator.make)
         .where(
+            APPROVED,
             Calculator.parent_id.is_(None),
             func.json_array_length(Calculator.images) > 0,
         )

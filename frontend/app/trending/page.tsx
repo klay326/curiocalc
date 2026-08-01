@@ -12,35 +12,25 @@ type Section = {
 };
 
 export default function TrendingPage() {
-  const [sections, setSections] = useState<Section[]>([]);
+  const EMPTY_SECTIONS: Section[] = [
+    { title: 'Hot this week', emoji: '🔥', desc: 'Most added to collections in the past 7 days', calcs: [] },
+    { title: 'Most wanted',   emoji: '⭐', desc: 'Most added to wishlists this week',             calcs: [] },
+    { title: 'New additions', emoji: '✨', desc: 'Recently added to the database',                calcs: [] },
+  ];
+  const [sections, setSections] = useState<Section[]>(EMPTY_SECTIONS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.stats.trending()
       .then(data => {
         setSections([
-          {
-            title: 'Hot this week',
-            emoji: '🔥',
-            desc: 'Most added to collections in the past 7 days',
-            calcs: data.trending_owned,
-          },
-          {
-            title: 'Most wanted',
-            emoji: '⭐',
-            desc: 'Most added to wishlists this week',
-            calcs: data.trending_wanted,
-          },
-          {
-            title: 'New additions',
-            emoji: '✨',
-            desc: 'Recently added to the database',
-            calcs: data.new_this_week,
-          },
+          { ...EMPTY_SECTIONS[0], calcs: data.trending_owned },
+          { ...EMPTY_SECTIONS[1], calcs: data.trending_wanted },
+          { ...EMPTY_SECTIONS[2], calcs: data.new_this_week },
         ]);
       })
-      .catch(() => {})
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

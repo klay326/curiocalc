@@ -91,7 +91,7 @@ function MessageModal({ toUsername, calcId, calcName, onClose }: {
                 Cancel
               </button>
               <button onClick={send} disabled={sending || !body.trim()}
-                className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-mono text-sm font-bold hover:bg-green-500 transition-colors disabled:opacity-50">
+                className="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg font-mono text-sm font-bold hover:bg-amber-500 transition-colors disabled:opacity-50">
                 {sending ? 'Sending…' : '✉ Send message'}
               </button>
             </div>
@@ -209,7 +209,7 @@ function MakeOfferModal({ match, onClose, onSent }: {
             </div>
 
             <div className="mb-4">
-              <p className="text-[9px] font-mono text-green-500 uppercase tracking-widest mb-2">
+              <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-2">
                 You request (their for-sale calcs you want)
               </p>
               {match.they_have.length === 0 ? (
@@ -220,14 +220,14 @@ function MakeOfferModal({ match, onClose, onSent }: {
                     <label key={c.id}
                       className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
                         requestingIds.includes(c.id)
-                          ? 'border-green-700/60 bg-green-950/20'
+                          ? 'border-amber-700/60 bg-amber-950/20'
                           : 'border-zinc-800 hover:border-zinc-700'
                       }`}>
                       <input
                         type="checkbox"
                         checked={requestingIds.includes(c.id)}
                         onChange={() => toggleId(c.id, requestingIds, setRequestingIds)}
-                        className="accent-green-400"
+                        className="accent-amber-400"
                       />
                       <div className="w-8 h-8 bg-zinc-800 rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
                         {c.images[0]
@@ -315,7 +315,7 @@ function OfferCard({ offer, myUserId, onAction }: {
         </div>
         <div className="text-zinc-700 font-mono text-lg self-center">⇄</div>
         <div className="flex-1">
-          <p className="text-[9px] font-mono text-green-500 uppercase tracking-widest mb-1">Requesting</p>
+          <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-1">Requesting</p>
           <p className="font-mono text-sm text-zinc-200 font-bold">
             {offer.requesting_ids.length} calc{offer.requesting_ids.length !== 1 ? 's' : ''}
           </p>
@@ -477,7 +477,7 @@ export default function TradePage() {
       <div className="mb-8">
         <Link href="/" className="text-zinc-600 hover:text-zinc-400 font-mono text-xs">← back</Link>
         <div className="flex items-end gap-4 mt-3">
-          <h1 className="text-3xl font-bold font-mono text-green-400">🏷 Trade board</h1>
+          <h1 className="text-3xl font-bold font-mono text-amber-400">🏷 Trade board</h1>
         </div>
         <p className="text-zinc-600 font-mono text-xs mt-1">
           Community listings — calculators for sale, and what people are looking for.
@@ -487,7 +487,7 @@ export default function TradePage() {
       <div className="flex gap-1 mb-6 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit flex-wrap">
         <button onClick={() => setTab('for_sale')}
           className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors ${
-            tab === 'for_sale' ? 'bg-green-900/60 text-green-300 font-bold' : 'text-zinc-500 hover:text-zinc-300'
+            tab === 'for_sale' ? 'bg-amber-900/60 text-amber-300 font-bold' : 'text-zinc-500 hover:text-zinc-300'
           }`}>
           🏷 For Sale ({listings.length})
         </button>
@@ -526,7 +526,7 @@ export default function TradePage() {
           placeholder={tab === 'for_sale' ? 'Search listings…' : 'Search wanted calcs…'}
           value={query}
           onChange={e => setQuery(e.target.value)}
-          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-100 placeholder-zinc-600 font-mono text-sm focus:outline-none focus:border-green-500 transition-colors mb-8"
+          className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-100 placeholder-zinc-600 font-mono text-sm focus:outline-none focus:border-amber-500 transition-colors mb-8"
         />
       )}
 
@@ -547,13 +547,13 @@ export default function TradePage() {
           <div className="text-center py-24 text-zinc-600 font-mono">
             <div className="text-5xl mb-4">🏷</div>
             <p className="text-sm">{query ? `No listings match "${query}"` : 'No listings yet.'}</p>
-            {!query && <Link href="/collection" className="text-green-400 hover:text-green-300 text-xs mt-3 inline-block">Go to my collection →</Link>}
+            {!query && <Link href="/collection" className="text-amber-400 hover:text-amber-300 text-xs mt-3 inline-block">Go to my collection →</Link>}
           </div>
         ) : (
           <div className="space-y-3">
             {filteredListings.map(listing => (
               <div key={listing.entry_id}
-                className="bg-zinc-900 border border-zinc-800 hover:border-green-900/50 rounded-xl p-4 flex gap-4 transition-colors">
+                className="bg-zinc-900 border border-zinc-800 hover:border-amber-900/50 rounded-xl p-4 flex gap-4 transition-colors">
                 <Link href={`/calculators/${listing.calculator_id}`} className="flex-shrink-0">
                   <div className="w-16 h-16 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center">
                     {listing.images[0]
@@ -566,11 +566,11 @@ export default function TradePage() {
                     <div className="min-w-0">
                       <p className="text-[10px] text-zinc-600 font-mono">{listing.make}</p>
                       <Link href={`/calculators/${listing.calculator_id}`}>
-                        <p className="font-bold font-mono text-zinc-100 hover:text-green-400 transition-colors truncate">{listing.model}</p>
+                        <p className="font-bold font-mono text-zinc-100 hover:text-amber-400 transition-colors truncate">{listing.model}</p>
                       </Link>
                     </div>
                     {listing.acquired_price != null && (
-                      <span className="text-sm font-bold font-mono text-green-400 flex-shrink-0">${listing.acquired_price}</span>
+                      <span className="text-sm font-bold font-mono text-amber-400 flex-shrink-0">${listing.acquired_price}</span>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mt-1.5">
@@ -590,7 +590,7 @@ export default function TradePage() {
                     <span className="text-[10px] text-zinc-700 font-mono">· {new Date(listing.listed_at).toLocaleDateString()}</span>
                     <button
                       onClick={() => setMessageTarget({ username: listing.seller_username, calcId: listing.calculator_id, calcName: `${listing.make} ${listing.model}` })}
-                      className="ml-auto text-[11px] font-mono text-green-500 hover:text-green-400 border border-green-900/50 hover:border-green-700/60 px-2.5 py-1 rounded-lg transition-colors">
+                      className="ml-auto text-[11px] font-mono text-amber-500 hover:text-amber-400 border border-amber-900/50 hover:border-amber-700/60 px-2.5 py-1 rounded-lg transition-colors">
                       ✉ Message seller
                     </button>
                   </div>
@@ -711,11 +711,11 @@ export default function TradePage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-[9px] font-mono text-green-500 uppercase tracking-widest mb-1.5">They have (you want)</p>
+                    <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-1.5">They have (you want)</p>
                     <div className="flex gap-1.5 overflow-x-auto pb-1">
                       {m.they_have.slice(0, 4).map(c => (
                         <Link key={c.id} href={`/calculators/${c.id}`} className="flex-shrink-0">
-                          <div className="w-12 h-12 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center border border-green-900/30 hover:border-green-700/50 transition-colors">
+                          <div className="w-12 h-12 bg-zinc-800 rounded-lg overflow-hidden flex items-center justify-center border border-amber-900/30 hover:border-amber-700/50 transition-colors">
                             {c.images[0] ? <img src={c.images[0]} alt="" className="w-full h-full object-contain" /> : <span className="text-base opacity-20">🧮</span>}
                           </div>
                           <p className="text-[9px] font-mono text-zinc-600 truncate w-12 text-center mt-0.5">{c.model}</p>

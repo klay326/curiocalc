@@ -125,12 +125,12 @@ export default function MarketPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
       <div className="mb-6">
-        <Link href="/" className="text-zinc-600 hover:text-zinc-400 font-mono text-xs">← home</Link>
+        <Link href="/" className="text-zinc-600 hover:text-zinc-400 font-mono text-xs">← back</Link>
         <div className="flex items-start justify-between mt-3">
           <div>
             <h1 className="text-2xl font-bold font-mono text-amber-400">Marketplace</h1>
             <p className="text-zinc-500 font-mono text-xs mt-1">
-              {loading ? 'Loading…' : `${listings.length} listing${listings.length !== 1 ? 's' : ''} from collectors`}
+              {loading ? 'Loading…' : listings.length > 0 ? `${listings.length} listing${listings.length !== 1 ? 's' : ''} from collectors` : 'Browse calcs listed for sale by other collectors'}
             </p>
           </div>
           <Link href="/trade"

@@ -228,7 +228,7 @@ export default function DocsPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
       <div className="mb-8">
-        <Link href="/" className="text-zinc-600 hover:text-zinc-400 font-mono text-xs">← home</Link>
+        <Link href="/" className="text-zinc-600 hover:text-zinc-400 font-mono text-xs">← back</Link>
         <h1 className="text-3xl font-bold font-mono text-amber-400 mt-3">API Reference</h1>
         <p className="text-zinc-500 font-mono text-xs mt-2">
           Base URL: <code className="text-zinc-300">{BASE}</code>

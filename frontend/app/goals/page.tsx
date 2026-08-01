@@ -198,7 +198,7 @@ export default function GoalsPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
       <div className="mb-6">
-        <Link href="/" className="text-zinc-600 hover:text-zinc-400 font-mono text-xs">← home</Link>
+        <Link href="/" className="text-zinc-600 hover:text-zinc-400 font-mono text-xs">← back</Link>
         <div className="flex items-center justify-between mt-3">
           <div>
             <h1 className="text-2xl font-bold font-mono text-amber-400">Collection goals</h1>

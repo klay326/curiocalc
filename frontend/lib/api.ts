@@ -708,6 +708,10 @@ export const api = {
       request<Calculator>(`/api/v1/admin/calculators/${id}/approve`, { method: 'POST' }),
     rejectSubmission: (id: string) =>
       request<void>(`/api/v1/admin/calculators/${id}/reject`, { method: 'POST' }),
+    bulkApprove: (ids: string[]) =>
+      request<{ approved: number }>('/api/v1/admin/submissions/bulk-approve', { method: 'POST', body: JSON.stringify({ ids }) }),
+    bulkReject: (ids: string[]) =>
+      request<{ rejected: number }>('/api/v1/admin/submissions/bulk-reject', { method: 'POST', body: JSON.stringify({ ids }) }),
     emailStatus: () => request<{ configured: boolean; smtp_host: string | null; smtp_user: string | null }>('/api/v1/admin/email-status'),
     calcRequests: (status?: string) =>
       request<CalcRequest[]>(`/api/v1/calc-requests/admin${status ? `?status=${status}` : ''}`),

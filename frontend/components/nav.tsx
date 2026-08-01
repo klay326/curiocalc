@@ -373,37 +373,65 @@ export function Nav() {
     { href: '/trade', label: 'Trade' },
   ];
 
-  const moreLinks = [
-    { href: '/search', label: 'Search' },
-    { href: '/market', label: 'Marketplace' },
-    { href: '/goals', label: 'Collection goals' },
-    { href: '/timeline', label: 'Timeline' },
-    { href: '/top', label: 'Top collectors' },
-    { href: '/collectors', label: 'Discover collectors' },
-    { href: '/compare', label: 'Compare' },
-    { href: '/collector-compare', label: 'Compare collectors' },
-    { href: '/contribute', label: 'Contribute' },
-    { href: '/request', label: 'Request a calc' },
-    { href: '/docs', label: 'API docs' },
-    { href: '/stats', label: 'Site stats' },
+  const moreGroups = [
+    {
+      label: 'Collect',
+      links: [
+        { href: '/market', label: 'Marketplace' },
+        { href: '/goals', label: 'Collection goals' },
+        { href: '/timeline', label: 'Timeline' },
+      ],
+    },
+    {
+      label: 'Community',
+      links: [
+        { href: '/collectors', label: 'Discover collectors' },
+        { href: '/top', label: 'Top collectors' },
+        { href: '/compare', label: 'Compare calcs' },
+        { href: '/collector-compare', label: 'Compare collectors' },
+      ],
+    },
+    {
+      label: 'Contribute',
+      links: [
+        { href: '/request', label: 'Request a calc' },
+        { href: '/contribute', label: 'Contribute data' },
+        { href: '/stats', label: 'Site stats' },
+        { href: '/docs', label: 'API docs' },
+      ],
+    },
   ];
 
-  // Mobile drawer only shows secondary/utility links — primary nav is in bottom tab bar
-  const mobileDiscoverLinks = [
-    { href: '/search', label: 'Search' },
-    { href: '/market', label: 'Marketplace' },
-    { href: '/goals', label: 'Collection goals' },
-    { href: '/brands', label: 'Brands' },
-    { href: '/trending', label: 'Trending' },
-    { href: '/timeline', label: 'Timeline' },
-    { href: '/top', label: 'Top collectors' },
-    { href: '/collectors', label: 'Discover collectors' },
-    { href: '/compare', label: 'Compare calcs' },
-    { href: '/collector-compare', label: 'Compare collectors' },
-    { href: '/contribute', label: 'Contribute' },
-    { href: '/request', label: 'Request a calc' },
-    { href: '/docs', label: 'API docs' },
-    { href: '/stats', label: 'Site stats' },
+  // Mobile drawer secondary links (primary nav is in bottom tab bar)
+  const mobileGroups = [
+    {
+      label: 'Discover',
+      links: [
+        { href: '/brands', label: 'Brands' },
+        { href: '/trending', label: 'Trending' },
+        { href: '/market', label: 'Marketplace' },
+        { href: '/timeline', label: 'Timeline' },
+        { href: '/goals', label: 'Collection goals' },
+      ],
+    },
+    {
+      label: 'Community',
+      links: [
+        { href: '/collectors', label: 'Discover collectors' },
+        { href: '/top', label: 'Top collectors' },
+        { href: '/compare', label: 'Compare calcs' },
+        { href: '/collector-compare', label: 'Compare collectors' },
+      ],
+    },
+    {
+      label: 'Contribute',
+      links: [
+        { href: '/request', label: 'Request a calc' },
+        { href: '/contribute', label: 'Contribute data' },
+        { href: '/stats', label: 'Site stats' },
+        { href: '/docs', label: 'API docs' },
+      ],
+    },
   ];
 
   return (
@@ -436,12 +464,20 @@ export function Nav() {
                 </svg>
               </button>
               {moreOpen && (
-                <div className="absolute left-0 top-9 w-52 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
-                  {moreLinks.map(({ href, label }) => (
-                    <Link key={href} href={href} onClick={() => setMoreOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors">
-                      {label}
-                    </Link>
+                <div className="absolute left-0 top-9 w-52 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden py-2">
+                  {moreGroups.map((group, gi) => (
+                    <div key={group.label}>
+                      {gi > 0 && <div className="mx-3 my-1 border-t border-zinc-800" />}
+                      <p className="px-4 pt-2 pb-1 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">{group.label}</p>
+                      {group.links.map(({ href, label }) => (
+                        <Link key={href} href={href} onClick={() => setMoreOpen(false)}
+                          className={`flex items-center gap-2 px-4 py-1.5 text-xs font-mono transition-colors ${
+                            isActive(href) ? 'text-amber-400' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
+                          }`}>
+                          {label}
+                        </Link>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
@@ -567,9 +603,13 @@ export function Nav() {
         <div className="md:hidden fixed inset-x-0 bottom-0 z-40 bg-zinc-950 overflow-y-auto"
           style={{ top: 'calc(3.5rem + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
           <div className="pt-1 pb-6">
-            <p className="px-4 pt-3 pb-1 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">Discover</p>
-            {mobileDiscoverLinks.map(({ href, label }) => (
-              <Link key={href} href={href} className={mobileLinkCls(href)}>{label}</Link>
+            {mobileGroups.map(group => (
+              <div key={group.label}>
+                <p className="px-4 pt-3 pb-1 text-[9px] font-mono text-zinc-600 uppercase tracking-widest">{group.label}</p>
+                {group.links.map(({ href, label }) => (
+                  <Link key={href} href={href} className={mobileLinkCls(href)}>{label}</Link>
+                ))}
+              </div>
             ))}
 
             {user ? (
