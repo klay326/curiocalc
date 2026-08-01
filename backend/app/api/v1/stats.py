@@ -19,28 +19,32 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     if hit is not None:
         return hit
 
+    APPROVED = Calculator.status == "approved"
+
     # Count only base models (parent_id IS NULL) — variants are part of the same model
     total_calcs   = (await db.execute(
-        select(func.count(Calculator.id)).where(Calculator.parent_id.is_(None))
+        select(func.count(Calculator.id)).where(APPROVED, Calculator.parent_id.is_(None))
     )).scalar() or 0
-    total_brands  = (await db.execute(select(func.count(distinct(Calculator.make))))).scalar() or 0
+    total_brands  = (await db.execute(
+        select(func.count(distinct(Calculator.make))).where(APPROVED)
+    )).scalar() or 0
     total_users   = (await db.execute(select(func.count(User.id)))).scalar() or 0
     total_owned   = (await db.execute(
         select(func.count(CollectionEntry.id)).where(CollectionEntry.status == "owned")
     )).scalar() or 0
     with_images   = (await db.execute(
         select(func.count(Calculator.id)).where(
-            func.json_array_length(Calculator.images) > 0
+            APPROVED, func.json_array_length(Calculator.images) > 0
         )
     )).scalar() or 0
     with_desc     = (await db.execute(
-        select(func.count(Calculator.id)).where(Calculator.description.isnot(None))
+        select(func.count(Calculator.id)).where(APPROVED, Calculator.description.isnot(None))
     )).scalar() or 0
 
     # Top 8 brands by calc count (base models only)
     top_brands_r = await db.execute(
         select(Calculator.make, func.count(Calculator.id).label("cnt"))
-        .where(Calculator.parent_id.is_(None))
+        .where(APPROVED, Calculator.parent_id.is_(None))
         .group_by(Calculator.make)
         .order_by(func.count(Calculator.id).desc())
         .limit(8)
@@ -53,16 +57,16 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             (func.floor(Calculator.year_introduced / 10) * 10).label("decade"),
             func.count(Calculator.id).label("cnt"),
         )
-        .where(Calculator.year_introduced.isnot(None), Calculator.parent_id.is_(None))
+        .where(APPROVED, Calculator.year_introduced.isnot(None), Calculator.parent_id.is_(None))
         .group_by("decade")
         .order_by("decade")
     )
     decades = [{"decade": int(row.decade), "count": row.cnt} for row in decades_r]
 
-    # Recent additions (last 8, base models only)
+    # Recent additions (last 8, approved base models only)
     recent_r = await db.execute(
         select(Calculator)
-        .where(Calculator.parent_id.is_(None))
+        .where(APPROVED, Calculator.parent_id.is_(None))
         .order_by(Calculator.created_at.desc())
         .limit(8)
     )
@@ -137,10 +141,10 @@ async def get_trending(db: AsyncSession = Depends(get_db)):
     )
     trending_wanted_ids = [row.calculator_id for row in wanted_r]
 
-    # Newest additions to the DB (base models only)
+    # Newest additions to the DB (approved base models only)
     new_r = await db.execute(
         select(Calculator)
-        .where(Calculator.parent_id.is_(None))
+        .where(Calculator.status == "approved", Calculator.parent_id.is_(None))
         .order_by(Calculator.created_at.desc())
         .limit(12)
     )
