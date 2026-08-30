@@ -224,6 +224,159 @@ function PhotoPanel({ entry, onUpdate }: { entry: EntryWithCalc; onUpdate: (upda
   );
 }
 
+// ── Bulk add modal ───────────────────────────────────────────────────────────
+
+function BulkAdd({ existingIds, onAdded }: { existingIds: Set<string>; onAdded: (added: EntryWithCalc[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Calculator[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState<'owned' | 'wanted'>('owned');
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (query.length < 2) { setResults([]); return; }
+    const t = setTimeout(() => {
+      api.calculators.list({ q: query, limit: 20 }).then(setResults).catch(() => {});
+    }, 200);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+    else { setQuery(''); setResults([]); setSelected(new Set()); setError(null); }
+  }, [open]);
+
+  const toggle = (id: string) => setSelected(prev => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+
+  const handleAdd = async () => {
+    if (selected.size === 0) return;
+    setAdding(true);
+    setError(null);
+    const added: EntryWithCalc[] = [];
+    const calcMap = Object.fromEntries(results.map(c => [c.id, c]));
+    for (const id of selected) {
+      try {
+        const entry = await api.collection.add({ calculator_id: id, status });
+        added.push({ ...entry, calculator: calcMap[id] });
+      } catch {
+        // skip dupes / errors silently
+      }
+    }
+    setAdding(false);
+    if (added.length > 0) { onAdded(added); setOpen(false); }
+    else setError('Nothing added — those may already be in your collection.');
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="text-xs font-mono text-zinc-500 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+        title="Bulk add calculators"
+      >
+        + Bulk add
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+              <h3 className="font-mono font-bold text-zinc-100">Bulk Add to Collection</h3>
+              <button onClick={() => setOpen(false)} className="text-zinc-600 hover:text-zinc-300 text-xl leading-none">✕</button>
+            </div>
+
+            <div className="p-4 border-b border-zinc-800 space-y-3">
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search make, model…"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-zinc-100 font-mono text-sm focus:outline-none focus:border-amber-400 transition-colors"
+              />
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">Add as</span>
+                {(['owned', 'wanted'] as const).map(s => (
+                  <button key={s} onClick={() => setStatus(s)}
+                    className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                      status === s ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                    }`}>
+                    {s}
+                  </button>
+                ))}
+                {selected.size > 0 && (
+                  <span className="ml-auto text-[10px] font-mono text-amber-400">{selected.size} selected</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {results.length === 0 && query.length >= 2 && (
+                <p className="text-zinc-600 font-mono text-xs italic p-4">No results</p>
+              )}
+              {results.length === 0 && query.length < 2 && (
+                <p className="text-zinc-700 font-mono text-xs italic p-4">Type at least 2 characters to search</p>
+              )}
+              {results.map(c => {
+                const inCollection = existingIds.has(c.id);
+                const isSelected = selected.has(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => !inCollection && toggle(c.id)}
+                    disabled={inCollection}
+                    className={`w-full flex items-center gap-3 px-4 py-3 border-b border-zinc-800 last:border-0 text-left transition-colors ${
+                      inCollection ? 'opacity-40 cursor-not-allowed' : isSelected ? 'bg-amber-400/10' : 'hover:bg-zinc-800'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 flex-shrink-0 rounded border flex items-center justify-center text-[10px] transition-colors ${
+                      isSelected ? 'bg-amber-400 border-amber-400 text-zinc-950' : 'border-zinc-600'
+                    }`}>
+                      {isSelected && '✓'}
+                    </div>
+                    <div className="w-9 h-9 flex-shrink-0 bg-zinc-800 rounded overflow-hidden flex items-center justify-center">
+                      {c.images[0]
+                        ? <img src={c.images[0]} alt="" loading="lazy" className="w-full h-full object-contain" />
+                        : <span className="text-base opacity-20">🧮</span>}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] text-zinc-500 font-mono">{c.make}</p>
+                      <p className="text-sm font-mono font-bold text-zinc-200 truncate">{c.model}</p>
+                    </div>
+                    {inCollection && <span className="text-[10px] font-mono text-zinc-600 flex-shrink-0">in collection</span>}
+                    {c.year_introduced && !inCollection && <span className="text-[10px] font-mono text-zinc-600 flex-shrink-0">{c.year_introduced}</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-zinc-800">
+              {error && <p className="text-red-400 font-mono text-xs mb-3">{error}</p>}
+              <div className="flex gap-3">
+                <button onClick={() => setOpen(false)}
+                  className="flex-1 px-4 py-2 bg-zinc-800 text-zinc-400 rounded-lg font-mono text-sm hover:bg-zinc-700 transition-colors border border-zinc-700">
+                  Cancel
+                </button>
+                <button onClick={handleAdd} disabled={adding || selected.size === 0}
+                  className="flex-1 px-4 py-2 bg-amber-400 text-zinc-950 rounded-lg font-mono text-sm font-bold hover:bg-amber-300 transition-colors disabled:opacity-50">
+                  {adding ? 'Adding…' : `Add ${selected.size > 0 ? selected.size : ''} to ${status}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── CSV bulk import ───────────────────────────────────────────────────────
 
 function CsvImport({ onImported }: { onImported: (added: EntryWithCalc[]) => void }) {
@@ -791,6 +944,10 @@ export default function CollectionPage() {
           >
             🪪 My card
           </Link>
+          <BulkAdd
+            existingIds={new Set(entries.map(e => e.calculator_id))}
+            onAdded={(added) => setEntries(prev => [...prev, ...added])}
+          />
           <CsvImport onImported={(added) => setEntries(prev => [...prev, ...added])} />
           <button
             onClick={() => exportCSV(entries, user.username)}

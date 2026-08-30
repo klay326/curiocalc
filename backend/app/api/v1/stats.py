@@ -169,3 +169,38 @@ async def get_trending(db: AsyncSession = Depends(get_db)):
     }
     await cache_set("stats:trending", result, 180)  # 3-min TTL
     return result
+
+
+@router.get("/activity")
+async def get_activity(db: AsyncSession = Depends(get_db)):
+    """Recent collection adds — public social proof feed."""
+    hit = await cache_get("stats:activity")
+    if hit is not None:
+        return hit
+
+    result = await db.execute(
+        select(CollectionEntry, Calculator, User)
+        .join(Calculator, CollectionEntry.calculator_id == Calculator.id)
+        .join(User, CollectionEntry.user_id == User.id)
+        .where(
+            CollectionEntry.status == "owned",
+            Calculator.status == "approved",
+        )
+        .order_by(CollectionEntry.created_at.desc())
+        .limit(10)
+    )
+    rows = result.all()
+    activity = [
+        {
+            "username": user.username,
+            "display_name": user.display_name,
+            "calc_make": calc.make,
+            "calc_model": calc.model,
+            "calc_id": str(calc.id),
+            "calc_image": calc.images[0] if calc.images else None,
+            "added_at": entry.created_at.isoformat(),
+        }
+        for entry, calc, user in rows
+    ]
+    await cache_set("stats:activity", activity, 120)
+    return activity

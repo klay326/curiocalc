@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { api, type Calculator, type SiteStats, getRecentlyViewedIds } from '@/lib/api';
+import { api, type Calculator, type SiteStats, type ActivityItem, getRecentlyViewedIds } from '@/lib/api';
 import { CalculatorCard } from '@/components/calculator-card';
 import { useAuth } from '@/lib/auth';
 
@@ -28,6 +28,7 @@ export default function HomePage() {
   const [featured, setFeatured]       = useState<Calculator | null>(null);
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [recentlyViewed, setRecentlyViewed] = useState<Calculator[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [suggestions, setSuggestions] = useState<Calculator[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -72,6 +73,7 @@ export default function HomePage() {
     api.calculators.makes().then(setMakes).catch(() => {});
     api.calculators.tags().then(setAllTags).catch(() => {});
     api.stats.get().then(setStats).catch(() => {});
+    api.stats.activity().then(setActivity).catch(() => {});
     api.calculators.daily()
       .then(setFeatured)
       .catch(() => api.calculators.random().then(setFeatured).catch(() => {}))
@@ -334,6 +336,34 @@ export default function HomePage() {
                       <p className="text-[10px] font-bold text-zinc-300 group-hover:text-amber-400 transition-colors truncate">{c.model}</p>
                     </div>
                   </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Activity feed — social proof */}
+          {activity.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Recently collected</h2>
+              <div className="space-y-1.5">
+                {activity.map((item, i) => (
+                  <div key={i} className="flex items-center gap-3 py-1.5 px-3 bg-zinc-900 border border-zinc-800 rounded-lg">
+                    {item.calc_image ? (
+                      <img src={item.calc_image} alt={item.calc_model} loading="lazy" decoding="async"
+                        className="w-7 h-7 flex-shrink-0 rounded object-contain bg-zinc-800" />
+                    ) : (
+                      <div className="w-7 h-7 flex-shrink-0 rounded bg-zinc-800 flex items-center justify-center text-sm opacity-30">🧮</div>
+                    )}
+                    <p className="text-xs font-mono text-zinc-400 min-w-0 truncate">
+                      <Link href={`/u/${item.username}`} className="text-zinc-300 hover:text-amber-400 transition-colors font-bold">
+                        {item.display_name || `@${item.username}`}
+                      </Link>
+                      {' '}added{' '}
+                      <Link href={`/calculators/${item.calc_id}`} className="text-zinc-300 hover:text-amber-400 transition-colors">
+                        {item.calc_make} {item.calc_model}
+                      </Link>
+                    </p>
+                  </div>
                 ))}
               </div>
             </div>

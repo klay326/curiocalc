@@ -139,6 +139,33 @@ async def send_comment_email(
     )
 
 
+async def send_trade_offer_email(
+    to_email: str,
+    from_username: str,
+    from_display_name: str | None,
+    message: str | None,
+) -> None:
+    name = from_display_name or f"@{from_username}"
+    msg_block = (
+        f"""<blockquote style="border-left:3px solid #f59e0b;padding-left:12px;color:#555;margin:12px 0;">{message}</blockquote>"""
+        if message else ""
+    )
+    await _send_to(
+        to_email,
+        f"{name} sent you a trade offer",
+        f"""
+        <p><a href="https://curiocalc.org/u/{from_username}">@{from_username}</a>
+        sent you a <strong>trade offer</strong> on CurioCalc.</p>
+        {msg_block}
+        <p style="margin:20px 0;">
+          <a href="https://curiocalc.org/trade" style="background:#f59e0b;color:#1c1917;padding:10px 24px;border-radius:8px;font-weight:bold;text-decoration:none;">
+            View offer →
+          </a>
+        </p>
+        """,
+    )
+
+
 async def send_password_reset_email(to_email: str, token: str) -> None:
     reset_url = f"https://curiocalc.org/reset-password?token={token}"
     await _send_to(

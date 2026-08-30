@@ -275,6 +275,16 @@ export type TrendingCalcs = {
   new_this_week: Calculator[];
 };
 
+export type ActivityItem = {
+  username: string;
+  display_name: string | null;
+  calc_make: string;
+  calc_model: string;
+  calc_id: string;
+  calc_image: string | null;
+  added_at: string;
+};
+
 export type ForSaleListing = {
   entry_id: string;
   calculator_id: string;
@@ -660,6 +670,7 @@ export const api = {
   stats: {
     get: () => request<SiteStats>('/api/v1/stats'),
     trending: () => request<TrendingCalcs>('/api/v1/stats/trending'),
+    activity: () => request<ActivityItem[]>('/api/v1/stats/activity'),
   },
 
   admin: {

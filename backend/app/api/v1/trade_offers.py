@@ -10,6 +10,7 @@ from app.api.deps import get_current_user, get_db
 from app.cache import rate_limit_check
 from app.models.trade_offer import TradeOffer
 from app.models.user import User
+from app.services.email import send_trade_offer_email
 from app.services.push import send_push_to_user
 
 router = APIRouter(prefix="/trade-offers", tags=["trade-offers"])
@@ -74,6 +75,8 @@ async def create_offer(
     await db.refresh(offer)
     name = me.display_name or f"@{me.username}"
     await send_push_to_user(recipient.id, db, "New trade offer", f"{name} sent you a trade offer")
+    if recipient.email:
+        await send_trade_offer_email(recipient.email, me.username, me.display_name, offer.message)
     return _serialize(offer, me, recipient)
 
 
