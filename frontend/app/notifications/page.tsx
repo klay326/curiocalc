@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, type NotificationItem } from '@/lib/api';
@@ -18,21 +18,53 @@ function notifLabel(n: NotificationItem) {
   const actor = n.actor_display_name ?? n.actor_username ?? 'Someone';
   if (n.type === 'follow') return `${actor} followed you`;
   if (n.type === 'comment') return `${actor} commented on ${n.calc_make} ${n.calc_model}`;
+  if (n.type === 'trade_offer') return `${actor} sent you a trade offer`;
+  if (n.type === 'trade_accepted') return `${actor} accepted your trade offer`;
   return n.body ?? 'New notification';
 }
 
 function notifHref(n: NotificationItem) {
   if (n.type === 'follow' && n.actor_username) return `/u/${n.actor_username}`;
   if (n.type === 'comment' && n.calc_id) return `/calculators/${n.calc_id}`;
+  if (n.type === 'trade_offer' || n.type === 'trade_accepted') return '/trade';
   return '#';
 }
+
+function notifIcon(type: string) {
+  if (type === 'follow') return '👤';
+  if (type === 'comment') return '💬';
+  if (type === 'trade_offer') return '🔄';
+  if (type === 'trade_accepted') return '✅';
+  return '🔔';
+}
+
+function dayKey(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return 'This week';
+  if (diffDays < 30) return 'This month';
+  return 'Older';
+}
+
+const TABS = [
+  { key: 'all',   label: 'All' },
+  { key: 'follow', label: 'Follows' },
+  { key: 'comment', label: 'Comments' },
+  { key: 'trade', label: 'Trades' },
+] as const;
+
+type TabKey = typeof TABS[number]['key'];
 
 export default function NotificationsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dismissing, setDismissing] = useState<string | null>(null);
+  const [dismissing, setDismissing] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<TabKey>('all');
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -43,7 +75,6 @@ export default function NotificationsPage() {
     api.notifications.list()
       .then(data => {
         setItems(data.notifications);
-        // Mark all read
         api.notifications.markRead().catch(() => {});
       })
       .catch(() => {})
@@ -51,13 +82,41 @@ export default function NotificationsPage() {
   }, [user]);
 
   const dismiss = async (id: string) => {
-    setDismissing(id);
+    setDismissing(prev => new Set(prev).add(id));
     try {
       await api.notifications.dismiss(id);
       setItems(prev => prev.filter(n => n.id !== id));
     } catch { /* ignore */ }
-    finally { setDismissing(null); }
+    finally { setDismissing(prev => { const n = new Set(prev); n.delete(id); return n; }); }
   };
+
+  const clearAll = async () => {
+    await Promise.all(items.map(n => api.notifications.dismiss(n.id).catch(() => {})));
+    setItems([]);
+  };
+
+  const filtered = useMemo(() => {
+    if (tab === 'all') return items;
+    if (tab === 'trade') return items.filter(n => n.type === 'trade_offer' || n.type === 'trade_accepted');
+    return items.filter(n => n.type === tab);
+  }, [items, tab]);
+
+  const grouped = useMemo(() => {
+    const groups: [string, NotificationItem[]][] = [];
+    const order = ['Today', 'Yesterday', 'This week', 'This month', 'Older'];
+    const map = new Map<string, NotificationItem[]>();
+    for (const n of filtered) {
+      const key = dayKey(n.created_at);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(n);
+    }
+    for (const key of order) {
+      if (map.has(key)) groups.push([key, map.get(key)!]);
+    }
+    return groups;
+  }, [filtered]);
+
+  const unreadCount = items.filter(n => !n.read).length;
 
   if (authLoading || loading) {
     return (
@@ -73,57 +132,111 @@ export default function NotificationsPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold font-mono text-amber-400">Notifications</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-bold font-mono text-amber-400">Notifications</h1>
+          {unreadCount > 0 && (
+            <p className="text-[11px] font-mono text-zinc-600 mt-0.5">{unreadCount} unread</p>
+          )}
+        </div>
         {items.length > 0 && (
-          <button
-            onClick={async () => {
-              await api.notifications.markRead().catch(() => {});
-              setItems(prev => prev.map(n => ({ ...n, read: true })));
-            }}
-            className="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            mark all read
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                api.notifications.markRead().catch(() => {});
+                setItems(prev => prev.map(n => ({ ...n, read: true })));
+              }}
+              className="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              mark all read
+            </button>
+            <button
+              onClick={clearAll}
+              className="text-xs font-mono text-zinc-600 hover:text-red-400 transition-colors"
+            >
+              clear all
+            </button>
+          </div>
         )}
       </div>
 
-      {items.length === 0 ? (
+      {/* Filter tabs */}
+      {items.length > 0 && (
+        <div className="flex gap-1.5 mb-5">
+          {TABS.map(t => {
+            const count = t.key === 'all' ? items.length
+              : t.key === 'trade' ? items.filter(n => n.type === 'trade_offer' || n.type === 'trade_accepted').length
+              : items.filter(n => n.type === t.key).length;
+            if (t.key !== 'all' && count === 0) return null;
+            return (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`text-xs px-3 py-1.5 rounded-full font-mono border transition-colors ${
+                  tab === t.key
+                    ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold'
+                    : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                }`}>
+                {t.label}{t.key !== 'all' ? ` (${count})` : ''}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
         <div className="text-center py-20">
           <div className="text-5xl mb-4">🔔</div>
-          <p className="text-zinc-500 font-mono text-sm">No notifications yet</p>
-          <p className="text-zinc-700 font-mono text-xs mt-2">Follow collectors and comment on calculators to get notified.</p>
+          <p className="text-zinc-500 font-mono text-sm">
+            {items.length === 0 ? 'No notifications yet' : `No ${tab} notifications`}
+          </p>
+          {items.length === 0 && (
+            <p className="text-zinc-700 font-mono text-xs mt-2">Follow collectors and comment on calculators to get notified.</p>
+          )}
         </div>
       ) : (
-        <div className="space-y-1">
-          {items.map(n => (
-            <div key={n.id} className={`group flex items-start gap-3 px-4 py-3 rounded-xl transition-colors ${!n.read ? 'bg-amber-400/5 border border-amber-400/10' : 'bg-zinc-900/40 border border-zinc-800/60'}`}>
-              <Link href={notifHref(n)} className="flex-1 flex items-start gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-amber-900/40 border border-amber-900/40 flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden">
-                  {n.actor_avatar_url
-                    ? <img src={n.actor_avatar_url} alt="" className="w-full h-full object-cover" />
-                    : <span className="text-sm font-bold text-amber-400 font-mono">
-                        {(n.actor_display_name ?? n.actor_username ?? '?').charAt(0).toUpperCase()}
-                      </span>
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-mono text-zinc-200">{notifLabel(n)}</p>
-                  {n.body && n.type === 'comment' && (
-                    <p className="text-xs font-mono text-zinc-500 mt-0.5 truncate italic">"{n.body}"</p>
-                  )}
-                  <p className="text-[11px] font-mono text-zinc-600 mt-0.5">{timeAgo(n.created_at)}</p>
-                </div>
-                {!n.read && <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-1.5" />}
-              </Link>
-              <button
-                onClick={() => dismiss(n.id)}
-                disabled={dismissing === n.id}
-                className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-zinc-400 transition-all text-base px-1 flex-shrink-0 disabled:opacity-30"
-                title="Dismiss"
-              >
-                {dismissing === n.id ? '…' : '×'}
-              </button>
+        <div className="space-y-6">
+          {grouped.map(([label, group]) => (
+            <div key={label}>
+              <p className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mb-2 px-1">{label}</p>
+              <div className="space-y-1">
+                {group.map(n => (
+                  <div key={n.id} className={`group flex items-start gap-3 px-4 py-3 rounded-xl transition-colors ${!n.read ? 'bg-amber-400/5 border border-amber-400/10' : 'bg-zinc-900/40 border border-zinc-800/60'}`}>
+                    <Link href={notifHref(n)} className="flex-1 flex items-start gap-3 min-w-0">
+                      {/* Avatar or icon */}
+                      <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden">
+                        {n.actor_avatar_url ? (
+                          <img src={n.actor_avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : n.actor_username ? (
+                          <span className="text-sm font-bold text-amber-400 font-mono">
+                            {(n.actor_display_name ?? n.actor_username).charAt(0).toUpperCase()}
+                          </span>
+                        ) : (
+                          <span className="text-base">{notifIcon(n.type)}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-mono text-zinc-200 leading-snug">{notifLabel(n)}</p>
+                        {n.body && n.type === 'comment' && (
+                          <p className="text-xs font-mono text-zinc-500 mt-0.5 truncate italic">"{n.body}"</p>
+                        )}
+                        {n.body && n.type === 'trade_offer' && (
+                          <p className="text-xs font-mono text-zinc-500 mt-0.5 truncate italic">"{n.body}"</p>
+                        )}
+                        <p className="text-[11px] font-mono text-zinc-600 mt-0.5">{timeAgo(n.created_at)}</p>
+                      </div>
+                      {!n.read && <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 mt-2" />}
+                    </Link>
+                    <button
+                      onClick={() => dismiss(n.id)}
+                      disabled={dismissing.has(n.id)}
+                      className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-zinc-400 transition-all text-lg px-1 flex-shrink-0 leading-none disabled:opacity-30 mt-0.5"
+                      title="Dismiss"
+                    >
+                      {dismissing.has(n.id) ? '…' : '×'}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>

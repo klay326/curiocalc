@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.cache import rate_limit_check
+from app.models.notification import Notification
 from app.models.trade_offer import TradeOffer
 from app.models.user import User
 from app.services.email import send_trade_offer_email
@@ -74,6 +75,16 @@ async def create_offer(
     await db.commit()
     await db.refresh(offer)
     name = me.display_name or f"@{me.username}"
+    db.add(Notification(
+        user_id=recipient.id,
+        type="trade_offer",
+        actor_id=me.id,
+        actor_username=me.username,
+        actor_display_name=me.display_name,
+        actor_avatar_url=me.avatar_url,
+        body=offer.message,
+    ))
+    await db.commit()
     await send_push_to_user(recipient.id, db, "New trade offer", f"{name} sent you a trade offer")
     if recipient.email:
         await send_trade_offer_email(recipient.email, me.username, me.display_name, offer.message)
@@ -163,6 +174,15 @@ async def respond_to_offer(
 
     if action == "accept":
         name = me.display_name or f"@{me.username}"
+        db.add(Notification(
+            user_id=offer.from_user_id,
+            type="trade_accepted",
+            actor_id=me.id,
+            actor_username=me.username,
+            actor_display_name=me.display_name,
+            actor_avatar_url=me.avatar_url,
+        ))
+        await db.commit()
         await send_push_to_user(offer.from_user_id, db, "Trade offer accepted", f"{name} accepted your trade offer")
 
     from_r = await db.execute(select(User).where(User.id == offer.from_user_id))

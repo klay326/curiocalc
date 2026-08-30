@@ -85,12 +85,15 @@ function NotificationBell() {
     const actor = n.actor_display_name ?? n.actor_username ?? 'Someone';
     if (n.type === 'follow') return `${actor} followed you`;
     if (n.type === 'comment') return `${actor} commented on ${n.calc_make} ${n.calc_model}`;
+    if (n.type === 'trade_offer') return `${actor} sent you a trade offer`;
+    if (n.type === 'trade_accepted') return `${actor} accepted your trade offer`;
     return n.body ?? '';
   };
 
   const notifHref = (n: Notification) => {
     if (n.type === 'follow' && n.actor_username) return `/u/${n.actor_username}`;
     if (n.type === 'comment' && n.calc_id) return `/calculators/${n.calc_id}`;
+    if (n.type === 'trade_offer' || n.type === 'trade_accepted') return '/trade';
     return '#';
   };
 
