@@ -2,11 +2,55 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { api, type UserProfile, type CollectionEntry, type Calculator } from '@/lib/api';
+import { api, type UserProfile, type CollectionEntry, type Calculator, type FollowUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { CalculatorCard } from '@/components/calculator-card';
 
 type Tab = 'owned' | 'wanted' | 'for_sale';
+
+function FollowListModal({
+  title,
+  users,
+  onClose,
+}: {
+  title: string;
+  users: FollowUser[];
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[70vh]"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+          <h3 className="font-mono font-bold text-zinc-100 text-sm">{title}</h3>
+          <button onClick={onClose} className="text-zinc-600 hover:text-zinc-300 text-xl leading-none">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/60">
+          {users.length === 0 ? (
+            <p className="px-5 py-8 text-center text-zinc-600 font-mono text-xs">Nobody here yet</p>
+          ) : users.map(u => (
+            <Link key={u.username} href={`/u/${u.username}`} onClick={onClose}
+              className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800 transition-colors">
+              <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {u.avatar_url
+                  ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                  : <span className="text-sm font-bold text-amber-400 font-mono">
+                      {(u.display_name ?? u.username).charAt(0).toUpperCase()}
+                    </span>
+                }
+              </div>
+              <div>
+                <p className="text-sm font-mono font-bold text-zinc-200">{u.display_name ?? u.username}</p>
+                <p className="text-[11px] font-mono text-zinc-500">@{u.username}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type Badge = {
   id: string;
@@ -248,6 +292,9 @@ export default function UserProfilePage() {
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [showcaseIds, setShowcaseIds] = useState<string[]>([]);
   const [showcaseSaving, setShowcaseSaving] = useState(false);
+  const [followModal, setFollowModal] = useState<'followers' | 'following' | null>(null);
+  const [followModalUsers, setFollowModalUsers] = useState<FollowUser[]>([]);
+  const [followModalLoading, setFollowModalLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -304,6 +351,18 @@ export default function UserProfilePage() {
     } finally {
       setShowcaseSaving(false);
     }
+  };
+
+  const openFollowModal = async (kind: 'followers' | 'following') => {
+    setFollowModal(kind);
+    setFollowModalLoading(true);
+    try {
+      const users = kind === 'followers'
+        ? await api.users.followers(username)
+        : await api.users.following(username);
+      setFollowModalUsers(users);
+    } catch { setFollowModalUsers([]); }
+    finally { setFollowModalLoading(false); }
   };
 
   const submitReport = async () => {
@@ -388,6 +447,12 @@ export default function UserProfilePage() {
             >
               ⚠ report
             </button>
+            <Link
+              href={`/trade?with=${username}`}
+              className="text-xs font-mono px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:border-amber-700/50 hover:text-amber-400 transition-colors"
+            >
+              🔄 Trade
+            </Link>
             <button
               onClick={toggleFollow}
               disabled={followLoading}
@@ -401,6 +466,17 @@ export default function UserProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Follow list modal */}
+      {followModal && (
+        <FollowListModal
+          title={followModal === 'followers'
+            ? `Followers (${followerCount})`
+            : `Following (${profile.following_count})`}
+          users={followModalLoading ? [] : followModalUsers}
+          onClose={() => setFollowModal(null)}
+        />
+      )}
 
       {/* Report user modal */}
       {showReport && (
@@ -485,14 +561,16 @@ export default function UserProfilePage() {
             <p className="text-2xl font-bold text-zinc-300 font-mono">{profile.wanted_count}</p>
             <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">wanted</p>
           </div>
-          <div className="text-center bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-            <p className="text-2xl font-bold text-zinc-300 font-mono">{followerCount}</p>
+          <button onClick={() => openFollowModal('followers')}
+            className="text-center bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl px-4 py-3 transition-colors cursor-pointer group">
+            <p className="text-2xl font-bold text-zinc-300 group-hover:text-amber-400 font-mono transition-colors">{followerCount}</p>
             <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">followers</p>
-          </div>
-          <div className="text-center bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-            <p className="text-2xl font-bold text-zinc-300 font-mono">{profile.following_count}</p>
+          </button>
+          <button onClick={() => openFollowModal('following')}
+            className="text-center bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl px-4 py-3 transition-colors cursor-pointer group">
+            <p className="text-2xl font-bold text-zinc-300 group-hover:text-amber-400 font-mono transition-colors">{profile.following_count}</p>
             <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-wider">following</p>
-          </div>
+          </button>
           {forSaleEntries.length > 0 && (
             <div className="text-center bg-zinc-900 border border-green-900/40 rounded-xl px-4 py-3">
               <p className="text-2xl font-bold text-green-400 font-mono">{forSaleEntries.length}</p>
@@ -501,6 +579,45 @@ export default function UserProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Recent activity */}
+      {(() => {
+        const recent = [...ownedEntries]
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 6)
+          .map(e => ({ entry: e, calc: calcMap[e.calculator_id] }))
+          .filter(({ calc }) => Boolean(calc));
+        if (recent.length === 0) return null;
+        function timeAgo(iso: string) {
+          const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+          if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+          if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
+          return new Date(iso).toLocaleDateString();
+        }
+        return (
+          <div className="mb-6">
+            <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mb-3">Recently added</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recent.map(({ entry, calc }) => (
+                <Link key={entry.id} href={`/calculators/${calc.id}`}
+                  className="group flex-shrink-0 w-20 bg-zinc-900 border border-zinc-800 hover:border-amber-400/30 rounded-lg overflow-hidden transition-colors">
+                  <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
+                    {calc.images[0]
+                      ? <img src={calc.images[0]} alt={calc.model} loading="lazy" decoding="async"
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" />
+                      : <span className="text-xl opacity-20">🧮</span>}
+                  </div>
+                  <div className="p-1.5">
+                    <p className="text-[9px] text-zinc-600 font-mono truncate">{calc.make}</p>
+                    <p className="text-[10px] font-bold text-zinc-300 group-hover:text-amber-400 transition-colors truncate">{calc.model}</p>
+                    <p className="text-[9px] text-zinc-700 font-mono mt-0.5">{timeAgo(entry.created_at)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Showcase */}
       {(showcaseIds.length > 0 || isOwn) && (
