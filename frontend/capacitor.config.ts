@@ -21,6 +21,10 @@ const config: CapacitorConfig = {
     backgroundColor: '#09090b',
   },
   plugins: {
+    PushNotifications: {
+      // Show banners even while the app is in the foreground
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#09090b',

@@ -651,7 +651,7 @@ export default function UserProfilePage() {
                         onClick={() => toggleShowcase(id)}
                         disabled={showcaseSaving}
                         title="Unpin from showcase"
-                        className="absolute top-1 right-1 w-5 h-5 bg-zinc-900/80 border border-zinc-700 rounded text-amber-400 text-[10px] flex items-center justify-center hover:bg-red-900/40 hover:border-red-900/50 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                        className="absolute top-1 right-1 w-5 h-5 bg-zinc-900/80 border border-zinc-700 rounded text-amber-400 text-[10px] flex items-center justify-center hover:bg-red-900/40 hover:border-red-900/50 hover:text-red-400 transition-colors can-hover:opacity-0 group-hover:opacity-100"
                       >
                         ★
                       </button>

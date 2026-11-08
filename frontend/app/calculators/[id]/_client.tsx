@@ -697,7 +697,7 @@ export default function CalculatorPage() {
                   {user?.is_superuser && (
                     <Link
                       href={`/calculators/${v.id}`}
-                      className="absolute top-2 right-2 opacity-0 group-hover/vcard:opacity-100 transition-opacity text-[10px] font-mono text-amber-500 hover:text-amber-300 bg-zinc-900 border border-amber-900/50 px-1.5 py-0.5 rounded"
+                      className="absolute top-2 right-2 can-hover:opacity-0 group-hover/vcard:opacity-100 transition-opacity text-[10px] font-mono text-amber-500 hover:text-amber-300 bg-zinc-900 border border-amber-900/50 px-1.5 py-0.5 rounded"
                     >
                       edit ↗
                     </Link>
@@ -1266,7 +1266,7 @@ function AdminEditPanel({
                 <img src={url} alt="" className="w-full h-full object-contain bg-zinc-800 rounded" />
                 <button
                   onClick={() => removeImage(i)}
-                  className="absolute inset-0 bg-black/70 rounded flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity text-red-400 text-base"
+                  className="absolute inset-0 bg-black/70 rounded flex items-center justify-center can-hover:opacity-0 group-hover/thumb:opacity-100 transition-opacity text-red-400 text-base"
                   title="Remove image"
                 >
                   🗑
@@ -1727,7 +1727,7 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
                 {currentUser?.id === c.user_id && editingId !== c.id && (
                   <button
                     onClick={() => startEdit(c)}
-                    className="text-[10px] font-mono text-zinc-700 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100"
+                    className="text-[10px] font-mono text-zinc-700 hover:text-amber-400 transition-colors can-hover:opacity-0 group-hover:opacity-100"
                   >
                     edit
                   </button>
@@ -1735,7 +1735,7 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
                 {(currentUser?.id === c.user_id || currentUser?.is_superuser) && editingId !== c.id && (
                   <button
                     onClick={() => handleDelete(c.id)}
-                    className="text-[10px] font-mono text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                    className="text-[10px] font-mono text-zinc-700 hover:text-red-400 transition-colors can-hover:opacity-0 group-hover:opacity-100"
                   >
                     delete
                   </button>
@@ -1746,7 +1746,7 @@ function CommentsSection({ calcId, currentUser }: { calcId: string; currentUser:
                   ) : (
                     <button
                       onClick={() => { setReportingId(c.id); setReportReason(''); }}
-                      className="text-[10px] font-mono text-zinc-700 hover:text-amber-500 transition-colors opacity-0 group-hover:opacity-100"
+                      className="text-[10px] font-mono text-zinc-700 hover:text-amber-500 transition-colors can-hover:opacity-0 group-hover:opacity-100"
                     >
                       report
                     </button>

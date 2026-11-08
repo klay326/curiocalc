@@ -102,10 +102,11 @@ function MessageModal({ toUsername, calcId, calcName, onClose }: {
   );
 }
 
-function MakeOfferModal({ match, onClose, onSent }: {
+function MakeOfferModal({ match, onClose, onSent, direct = false }: {
   match: TradeMatch;
   onClose: () => void;
   onSent: () => void;
+  direct?: boolean;
 }) {
   const [offeringIds, setOfferingIds] = useState<string[]>([]);
   const [requestingIds, setRequestingIds] = useState<string[]>([]);
@@ -174,10 +175,10 @@ function MakeOfferModal({ match, onClose, onSent }: {
 
             <div className="mb-4">
               <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-2">
-                You offer (your for-sale calcs they want)
+                {direct ? 'You offer (from your collection)' : 'You offer (your for-sale calcs they want)'}
               </p>
               {match.they_want.length === 0 ? (
-                <p className="text-zinc-600 font-mono text-xs">No calcs to offer in this match</p>
+                <p className="text-zinc-600 font-mono text-xs">{direct ? 'Your collection is empty' : 'No calcs to offer in this match'}</p>
               ) : (
                 <div className="space-y-1.5">
                   {match.they_want.map(c => (
@@ -210,10 +211,10 @@ function MakeOfferModal({ match, onClose, onSent }: {
 
             <div className="mb-4">
               <p className="text-[9px] font-mono text-amber-500 uppercase tracking-widest mb-2">
-                You request (their for-sale calcs you want)
+                {direct ? `You request (from @${match.username}'s collection)` : 'You request (their for-sale calcs you want)'}
               </p>
               {match.they_have.length === 0 ? (
-                <p className="text-zinc-600 font-mono text-xs">No calcs to request in this match</p>
+                <p className="text-zinc-600 font-mono text-xs">{direct ? 'They have nothing in their collection yet' : 'No calcs to request in this match'}</p>
               ) : (
                 <div className="space-y-1.5">
                   {match.they_have.map(c => (
@@ -378,7 +379,42 @@ export default function TradePage() {
   const [query, setQuery] = useState('');
   const [messageTarget, setMessageTarget] = useState<{ username: string; calcId: string; calcName: string } | null>(null);
   const [offerTarget, setOfferTarget] = useState<TradeMatch | null>(null);
+  const [offerDirect, setOfferDirect] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+
+  // /trade?with=username — open an offer to that collector using both full collections
+  useEffect(() => {
+    if (!user) return;
+    const withUser = new URLSearchParams(window.location.search).get('with');
+    if (!withUser || withUser === user.username) return;
+    (async () => {
+      try {
+        const [profile, theirs, mine] = await Promise.all([
+          api.users.get(withUser),
+          api.collection.forUser(withUser),
+          api.collection.mine(),
+        ]);
+        const tradeable = (es: typeof mine) => es.filter(e => e.status === 'owned' || e.status === 'for_sale');
+        const theirE = tradeable(theirs), mineE = tradeable(mine);
+        const ids = [...new Set([...theirE, ...mineE].map(e => e.calculator_id))];
+        const calcs = ids.length ? await api.calculators.batch(ids) : [];
+        const byId = Object.fromEntries(calcs.map(c => [c.id, c]));
+        const toInfo = (es: typeof mine) => [...new Set(es.map(e => e.calculator_id))]
+          .map(id => byId[id]).filter(Boolean)
+          .map(c => ({ id: c.id, make: c.make, model: c.model, images: c.images }));
+        setOfferDirect(true);
+        setOfferTarget({
+          user_id: profile.id,
+          username: profile.username,
+          display_name: profile.display_name,
+          avatar_url: profile.avatar_url,
+          they_have: toInfo(theirE),
+          they_want: toInfo(mineE),
+        });
+      } catch { /* unknown user — ignore */ }
+      window.history.replaceState(null, '', '/trade');
+    })();
+  }, [user]);
 
   useEffect(() => {
     Promise.all([api.trade.listings(), api.trade.wanted()])
@@ -460,9 +496,12 @@ export default function TradePage() {
       {offerTarget && (
         <MakeOfferModal
           match={offerTarget}
-          onClose={() => setOfferTarget(null)}
+          direct={offerDirect}
+          onClose={() => { setOfferTarget(null); setOfferDirect(false); }}
           onSent={() => {
             setOfferTarget(null);
+            setOfferDirect(false);
+            setTab('offers');
             if (tab === 'offers') {
               setOffersLoading(true);
               api.tradeOffers.list()

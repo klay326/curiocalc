@@ -204,7 +204,7 @@ function PhotoPanel({ entry, onUpdate }: { entry: EntryWithCalc; onUpdate: (upda
               <button
                 onClick={() => handleRemove(i)}
                 disabled={removing === i}
-                className="absolute inset-0 bg-black/60 rounded-lg opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-red-400 text-xs font-mono"
+                className="absolute inset-0 bg-black/60 rounded-lg can-hover:opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center text-red-400 text-xs font-mono"
               >
                 {removing === i ? '…' : '✕'}
               </button>
@@ -1026,7 +1026,13 @@ export default function CollectionPage() {
                : activeTab === 'wanted' ? "Your wishlist is empty."
                : "No items listed for sale. Hover an owned calculator and click 🏷 to list it."}
             </p>
-            {activeTab !== 'for_sale' && (
+            {activeTab === 'owned' && (
+              <Link href="/welcome"
+                className="inline-block mt-4 px-5 py-2.5 bg-amber-400 text-zinc-950 rounded-lg font-mono font-bold text-sm hover:bg-amber-300 transition-colors">
+                Add calculators you own →
+              </Link>
+            )}
+            {activeTab === 'wanted' && (
               <Link href="/" className="text-amber-400 hover:text-amber-300 text-xs mt-2 inline-block transition-colors">
                 Browse the catalog →
               </Link>
@@ -1089,7 +1095,7 @@ export default function CollectionPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 flex-shrink-0 can-hover:opacity-0 group-hover:opacity-100 transition-opacity">
                       {activeTab === 'owned' && (
                         <>
                           <button

@@ -10,6 +10,7 @@ from app.cache import rate_limit_check
 from app.models.calculator import Calculator
 from app.models.message import Message
 from app.models.user import User
+from app.services.push import send_push_to_user
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -94,6 +95,9 @@ async def send_message(
     db.add(msg)
     await db.commit()
     await db.refresh(msg)
+    name = me.display_name or f"@{me.username}"
+    preview = msg.body if len(msg.body) <= 120 else msg.body[:117] + "…"
+    await send_push_to_user(recipient.id, db, name, preview, data={"url": "/messages"})
     return _serialize(msg, me, recipient)
 
 

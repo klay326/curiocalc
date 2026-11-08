@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Only hide hover-reveal controls on devices that can actually hover (not phones / the iOS app) */
+@custom-variant can-hover (@media (hover: hover));
+
 /* ─── Base ─────────────────────────────────────────────────────── */
 @theme inline {
   --font-sans: var(--font-geist-sans);

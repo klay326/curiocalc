@@ -52,7 +52,10 @@ async def follow_user(
     if target.notification_prefs.get("email_follow", True):
         await send_follow_email(target.email, me.username, me.display_name)
     name = me.display_name or f"@{me.username}"
-    await send_push_to_user(target.id, db, "New follower", f"{name} started following you on CurioCalc")
+    await send_push_to_user(
+        target.id, db, "New follower", f"{name} started following you on CurioCalc",
+        data={"url": f"/u/{me.username}"},
+    )
 
 
 @router.delete("/users/{username}/follow", status_code=status.HTTP_204_NO_CONTENT)

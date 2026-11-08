@@ -229,7 +229,7 @@ export default function NotificationsPage() {
                     <button
                       onClick={() => dismiss(n.id)}
                       disabled={dismissing.has(n.id)}
-                      className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-zinc-400 transition-all text-lg px-1 flex-shrink-0 leading-none disabled:opacity-30 mt-0.5"
+                      className="can-hover:opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-zinc-400 transition-all text-lg px-1 flex-shrink-0 leading-none disabled:opacity-30 mt-0.5"
                       title="Dismiss"
                     >
                       {dismissing.has(n.id) ? '…' : '×'}

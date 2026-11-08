@@ -171,6 +171,7 @@ async def create_comment(
                 await send_push_to_user(
                     uid, db, f"New comment on {calc.make} {calc.model}",
                     f"@{current_user.username}: {snippet}",
+                    data={"url": f"/calculators/{calc.id}"},
                 )
                 if not (owner_prefs or {}).get("email_comment", True):
                     continue

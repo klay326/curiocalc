@@ -85,7 +85,9 @@ async def create_offer(
         body=offer.message,
     ))
     await db.commit()
-    await send_push_to_user(recipient.id, db, "New trade offer", f"{name} sent you a trade offer")
+    await send_push_to_user(
+        recipient.id, db, "New trade offer", f"{name} sent you a trade offer", data={"url": "/trade"}
+    )
     if recipient.email:
         await send_trade_offer_email(recipient.email, me.username, me.display_name, offer.message)
     return _serialize(offer, me, recipient)
@@ -183,7 +185,10 @@ async def respond_to_offer(
             actor_avatar_url=me.avatar_url,
         ))
         await db.commit()
-        await send_push_to_user(offer.from_user_id, db, "Trade offer accepted", f"{name} accepted your trade offer")
+        await send_push_to_user(
+            offer.from_user_id, db, "Trade offer accepted", f"{name} accepted your trade offer",
+            data={"url": "/trade"},
+        )
 
     from_r = await db.execute(select(User).where(User.id == offer.from_user_id))
     from_user = from_r.scalar_one()

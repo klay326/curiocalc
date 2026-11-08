@@ -4,7 +4,9 @@ import uuid
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import distinct, func, or_, select, text
+import re
+
+from sqlalchemy import and_, case, distinct, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_staff, get_current_superuser, get_current_user, get_db
@@ -20,6 +22,44 @@ from app.services.email import notify_calc_added, notify_calc_deleted, notify_ca
 from app.services.storage import upload_image
 
 router = APIRouter(prefix="/calculators", tags=["calculators"])
+
+
+def _norm(s: str) -> str:
+    """Lowercase and strip everything but letters/digits: 'TI-84 Plus' -> 'ti84plus'."""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+# SQL twin of _norm over make + model, so "ti84", "TI 84" and "ti-84" all match "TI-84"
+_NAME_NORM = func.regexp_replace(
+    func.lower(Calculator.make + literal(" ") + Calculator.model), "[^a-z0-9]", "", "g"
+)
+_MODEL_NORM = func.regexp_replace(func.lower(Calculator.model), "[^a-z0-9]", "", "g")
+
+
+def _search_filter(q: str):
+    """Every whitespace-separated token must match the normalized name or one of the text fields."""
+    clauses = []
+    for tok in q.split():
+        n = _norm(tok)
+        field_match = or_(
+            Calculator.description.ilike(f"%{tok}%"),
+            Calculator.tags.cast(text("text")).ilike(f"%{tok}%"),
+            Calculator.display_type.ilike(f"%{tok}%"),
+            Calculator.country_of_origin.ilike(f"%{tok}%"),
+        )
+        clauses.append(or_(_NAME_NORM.contains(n), field_match) if n else field_match)
+    return and_(*clauses) if clauses else literal(True)
+
+
+def _search_rank(q: str):
+    """Lower is better: exact model, model prefix, full name contains query, then everything else."""
+    n = _norm(q)
+    return case(
+        (_MODEL_NORM == n, 0),
+        (_MODEL_NORM.startswith(n), 1),
+        (_NAME_NORM.contains(n), 2),
+        else_=3,
+    )
 
 
 async def _bust_list_cache() -> None:
@@ -105,15 +145,7 @@ async def list_calculators(
     if not include_variants:
         stmt = stmt.where(Calculator.parent_id.is_(None))
 
-    if q:
-        stmt = stmt.where(or_(
-            Calculator.make.ilike(f"%{q}%"),
-            Calculator.model.ilike(f"%{q}%"),
-            Calculator.description.ilike(f"%{q}%"),
-            Calculator.tags.cast(text("text")).ilike(f"%{q}%"),
-            Calculator.display_type.ilike(f"%{q}%"),
-            Calculator.country_of_origin.ilike(f"%{q}%"),
-        ))
+    q = (q or "").strip() or None
     if calc_type:
         stmt = stmt.where(Calculator.calc_type == calc_type)
     if make:
@@ -139,6 +171,10 @@ async def list_calculators(
     if display_type:
         stmt = stmt.where(Calculator.display_type.ilike(f"%{display_type}%"))
 
+    base_stmt = stmt  # every filter except the free-text search
+    if q:
+        stmt = stmt.where(_search_filter(q))
+
     sort_col = {
         "make": Calculator.make,
         "year_introduced": Calculator.year_introduced,
@@ -147,14 +183,32 @@ async def list_calculators(
         "created_at": Calculator.created_at,
     }.get(sort, Calculator.make)
 
+    # A search with the default A–Z sort is ordered by relevance instead
+    rank_first = [_search_rank(q)] if q and sort == "make" else []
     if order == "desc":
-        stmt = stmt.order_by(sort_col.desc().nulls_last(), Calculator.make, Calculator.model)
+        stmt = stmt.order_by(*rank_first, sort_col.desc().nulls_last(), Calculator.make, Calculator.model)
     else:
-        stmt = stmt.order_by(sort_col.asc().nulls_last(), Calculator.make, Calculator.model)
+        stmt = stmt.order_by(*rank_first, sort_col.asc().nulls_last(), Calculator.make, Calculator.model)
 
     stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
     calcs = result.scalars().all()
+
+    # Typo fallback ("casoi fx82" -> Casio fx-82): if nothing matched, rank by trigram similarity
+    if q and not calcs and skip == 0:
+        n = _norm(q)
+        if len(n) >= 3:
+            try:
+                sim = func.word_similarity(n, _NAME_NORM)
+                fuzzy = (
+                    base_stmt.where(sim > 0.4)
+                    .order_by(sim.desc(), Calculator.make, Calculator.model)
+                    .limit(limit)
+                )
+                calcs = (await db.execute(fuzzy)).scalars().all()
+            except Exception:
+                await db.rollback()  # pg_trgm missing — no fuzzy results, not an error
+                calcs = []
 
     if not calcs:
         return []
