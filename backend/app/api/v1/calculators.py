@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from fastapi.responses import Response
 import re
 
-from sqlalchemy import and_, case, distinct, func, literal, or_, select, text
+from sqlalchemy import String, and_, case, distinct, func, literal, or_, select, text
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_staff, get_current_superuser, get_current_user, get_db
@@ -43,7 +44,7 @@ def _search_filter(q: str):
         n = _norm(tok)
         field_match = or_(
             Calculator.description.ilike(f"%{tok}%"),
-            Calculator.tags.cast(text("text")).ilike(f"%{tok}%"),
+            sa_cast(Calculator.tags, String).ilike(f"%{tok}%"),
             Calculator.display_type.ilike(f"%{tok}%"),
             Calculator.country_of_origin.ilike(f"%{tok}%"),
         )
