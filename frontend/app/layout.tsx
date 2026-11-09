@@ -7,6 +7,7 @@ import { Nav } from '@/components/nav';
 import { PushRegistration } from '@/components/push-registration';
 import { ServiceWorkerRegistration } from '@/components/service-worker';
 import { VerificationBanner } from '@/components/verification-banner';
+import { DeepLinks } from '@/components/deep-links';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -70,6 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <AuthProvider>
             <PushRegistration />
+            <DeepLinks />
             <ServiceWorkerRegistration />
             <Nav />
             <VerificationBanner />
