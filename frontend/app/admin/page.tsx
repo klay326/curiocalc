@@ -1369,12 +1369,15 @@ function SubmissionsTab() {
 
   const verdictOf = (c: Calculator) => triage[c.id]?.verdict;
   // Variants (retailer/colour editions) are approved/rejected together with their base model
+  // An edition whose base model is NOT in the queue (e.g. already live) is listed as its own row
+  const pendingIds = useMemo(() => new Set(calcs.map(c => c.id)), [calcs]);
+  const isGrouped = useCallback((c: Calculator) => !!c.parent_id && pendingIds.has(c.parent_id), [pendingIds]);
   const variantsOf = useMemo(() => {
     const m: Record<string, Calculator[]> = {};
-    for (const c of calcs) if (c.parent_id) (m[c.parent_id] ??= []).push(c);
+    for (const c of calcs) if (isGrouped(c)) (m[c.parent_id!] ??= []).push(c);
     return m;
-  }, [calcs]);
-  const baseCalcs = useMemo(() => calcs.filter(c => !c.parent_id), [calcs]);
+  }, [calcs, isGrouped]);
+  const baseCalcs = useMemo(() => calcs.filter(c => !isGrouped(c)), [calcs, isGrouped]);
   const makes = useMemo(() => [...new Set(baseCalcs.map(c => c.make))].sort(), [baseCalcs]);
   const types = useMemo(() => [...new Set(baseCalcs.map(c => c.calc_type).filter(Boolean))].sort(), [baseCalcs]);
   const byId = useMemo(() => Object.fromEntries(calcs.map(c => [c.id, c])), [calcs]);
@@ -1601,6 +1604,10 @@ function SubmissionsTab() {
                           <button onClick={() => rename(c)} className="text-left hover:text-amber-400 transition-colors" title="Rename">
                             {c.model}
                           </button>
+                          {c.parent_id && (
+                            <Link href={`/calculators/${c.parent_id}`} target="_blank"
+                              className="ml-2 text-[10px] font-normal text-zinc-600 hover:text-amber-400">edition of a live model ↗</Link>
+                          )}
                           {variantsOf[c.id]?.length ? (
                             <p className="text-[10px] font-normal text-zinc-600 mt-0.5" title="Approved or rejected together with this model">
                               + {variantsOf[c.id].map(v => v.variant_label || v.model).join(' · ')}

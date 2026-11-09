@@ -44,3 +44,6 @@ frontend/ios/DerivedData/
 frontend/android/.gradle/
 frontend/android/app/build/
 frontend/android/build/
+
+# Data-fix backups written on the server
+backend/backups/

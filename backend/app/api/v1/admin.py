@@ -501,7 +501,14 @@ async def triage_submissions(
     """Verdict per pending calc (duplicate / needs_fix / fixable / ready / no_year). Read-only."""
     pending_r = await db.execute(
         select(Calculator.id, Calculator.make, Calculator.model, Calculator.year_introduced)
-        .where(Calculator.status == "pending", Calculator.parent_id.is_(None))
+        .where(
+            Calculator.status == "pending",
+            # base models, plus editions whose base model isn't itself pending (e.g. already live)
+            or_(
+                Calculator.parent_id.is_(None),
+                Calculator.parent_id.not_in(select(Calculator.id).where(Calculator.status == "pending")),
+            ),
+        )
         .order_by(Calculator.created_at)
     )
     pending = [
