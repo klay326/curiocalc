@@ -276,7 +276,7 @@ export type TrendingCalcs = {
 };
 
 export type TriageVerdict = {
-  verdict: 'duplicate' | 'needs_fix' | 'fixable' | 'ready' | 'no_year';
+  verdict: 'not_calc' | 'duplicate' | 'needs_fix' | 'fixable' | 'ready' | 'no_year';
   issues?: string[];
   duplicate_of?: string;
   duplicate_of_label?: 'approved' | 'pending';

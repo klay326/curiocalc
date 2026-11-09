@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_superuser, get_db
@@ -558,8 +558,12 @@ async def bulk_approve_submissions(
     ids = [uuid.UUID(i) for i in payload.get("ids", [])]
     if not ids:
         return {"approved": 0}
+    # Pending variants (retailer/colour editions) follow their base model
     result = await db.execute(
-        select(Calculator).where(Calculator.id.in_(ids), Calculator.status == "pending")
+        select(Calculator).where(
+            or_(Calculator.id.in_(ids), Calculator.parent_id.in_(ids)),
+            Calculator.status == "pending",
+        )
     )
     calcs = result.scalars().all()
     for calc in calcs:
@@ -579,8 +583,12 @@ async def bulk_reject_submissions(
     ids = [uuid.UUID(i) for i in payload.get("ids", [])]
     if not ids:
         return {"rejected": 0}
+    # Pending variants (retailer/colour editions) follow their base model
     result = await db.execute(
-        select(Calculator).where(Calculator.id.in_(ids), Calculator.status == "pending")
+        select(Calculator).where(
+            or_(Calculator.id.in_(ids), Calculator.parent_id.in_(ids)),
+            Calculator.status == "pending",
+        )
     )
     calcs = result.scalars().all()
     for calc in calcs:

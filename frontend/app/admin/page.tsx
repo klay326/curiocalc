@@ -1338,6 +1338,7 @@ const VERDICTS: { key: TriageVerdict['verdict']; label: string; badge: string; h
   { key: 'fixable',   label: 'Fixable',    badge: 'text-sky-400 bg-sky-950/40 border-sky-900/50',          hint: 'Year stuck in the name — one click fixes it' },
   { key: 'needs_fix', label: 'Needs fix',  badge: 'text-amber-400 bg-amber-950/40 border-amber-900/50',    hint: 'Name looks cut off by the scraper' },
   { key: 'duplicate', label: 'Duplicate',  badge: 'text-red-400 bg-red-950/30 border-red-900/40',          hint: 'Same calc already approved or pending' },
+  { key: 'not_calc',  label: 'Not a calc', badge: 'text-fuchsia-400 bg-fuchsia-950/30 border-fuchsia-900/40', hint: 'Scraped page text, an accessory, or an organizer' },
 ];
 const VERDICT_META = Object.fromEntries(VERDICTS.map(v => [v.key, v]));
 
@@ -1349,6 +1350,7 @@ function SubmissionsTab() {
   const [search, setSearch] = useState('');
   const [filterMake, setFilterMake] = useState('');
   const [filterVerdict, setFilterVerdict] = useState<TriageVerdict['verdict'] | ''>('');
+  const [filterType, setFilterType] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -1366,21 +1368,30 @@ function SubmissionsTab() {
   useEffect(() => { load(); }, [load]);
 
   const verdictOf = (c: Calculator) => triage[c.id]?.verdict;
-  const makes = useMemo(() => [...new Set(calcs.map(c => c.make))].sort(), [calcs]);
+  // Variants (retailer/colour editions) are approved/rejected together with their base model
+  const variantsOf = useMemo(() => {
+    const m: Record<string, Calculator[]> = {};
+    for (const c of calcs) if (c.parent_id) (m[c.parent_id] ??= []).push(c);
+    return m;
+  }, [calcs]);
+  const baseCalcs = useMemo(() => calcs.filter(c => !c.parent_id), [calcs]);
+  const makes = useMemo(() => [...new Set(baseCalcs.map(c => c.make))].sort(), [baseCalcs]);
+  const types = useMemo(() => [...new Set(baseCalcs.map(c => c.calc_type).filter(Boolean))].sort(), [baseCalcs]);
   const byId = useMemo(() => Object.fromEntries(calcs.map(c => [c.id, c])), [calcs]);
 
   const verdictCounts = useMemo(() => {
     const n: Record<string, number> = {};
-    for (const c of calcs) { const v = triage[c.id]?.verdict; if (v) n[v] = (n[v] ?? 0) + 1; }
+    for (const c of baseCalcs) { const v = triage[c.id]?.verdict; if (v) n[v] = (n[v] ?? 0) + 1; }
     return n;
-  }, [calcs, triage]);
+  }, [baseCalcs, triage]);
 
-  const filtered = useMemo(() => calcs.filter(c => {
+  const filtered = useMemo(() => baseCalcs.filter(c => {
     if (filterMake && c.make !== filterMake) return false;
+    if (filterType && c.calc_type !== filterType) return false;
     if (filterVerdict && triage[c.id]?.verdict !== filterVerdict) return false;
     if (search) return `${c.make} ${c.model}`.toLowerCase().includes(search.toLowerCase());
     return true;
-  }), [calcs, triage, filterMake, filterVerdict, search]);
+  }), [baseCalcs, triage, filterMake, filterType, filterVerdict, search]);
 
   const grouped = useMemo(() => {
     const g: Record<string, Calculator[]> = {};
@@ -1393,7 +1404,7 @@ function SubmissionsTab() {
 
   const removeLocal = (ids: string[]) => {
     const gone = new Set(ids);
-    setCalcs(prev => prev.filter(c => !gone.has(c.id)));
+    setCalcs(prev => prev.filter(c => !gone.has(c.id) && !(c.parent_id && gone.has(c.parent_id))));
   };
 
   const approveMany = async (ids: string[]) => {
@@ -1452,8 +1463,9 @@ function SubmissionsTab() {
     </div>
   );
 
-  const dupIds = calcs.filter(c => verdictOf(c) === 'duplicate').map(c => c.id);
-  const fixableIds = calcs.filter(c => verdictOf(c) === 'fixable').map(c => c.id);
+  const dupIds = baseCalcs.filter(c => verdictOf(c) === 'duplicate').map(c => c.id);
+  const fixableIds = baseCalcs.filter(c => verdictOf(c) === 'fixable').map(c => c.id);
+  const notCalcIds = baseCalcs.filter(c => verdictOf(c) === 'not_calc').map(c => c.id);
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -1467,12 +1479,21 @@ function SubmissionsTab() {
       {/* Triage summary */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Triage · {calcs.length} pending</p>
+          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+            Triage · {baseCalcs.length} pending{calcs.length > baseCalcs.length ? ` (+${calcs.length - baseCalcs.length} variants)` : ''}
+          </p>
           <div className="flex gap-2 flex-wrap">
             {fixableIds.length > 0 && (
               <button onClick={() => fixAll(fixableIds)} disabled={fixableIds.some(id => acting.has(id))}
                 className="text-xs font-mono px-2.5 py-1 rounded bg-sky-950/40 text-sky-400 border border-sky-900/50 hover:bg-sky-900/40 transition-colors disabled:opacity-40">
                 ✎ Fix {fixableIds.length} names
+              </button>
+            )}
+            {notCalcIds.length > 0 && (
+              <button onClick={() => { if (confirm(`Reject ${notCalcIds.length} entries that aren't calculators (scraped text, accessories, organizers)? Check the "Not a calc" filter first if unsure.`)) rejectMany(notCalcIds); }}
+                disabled={notCalcIds.some(id => acting.has(id))}
+                className="text-xs font-mono px-2.5 py-1 rounded bg-fuchsia-950/30 text-fuchsia-400 border border-fuchsia-900/40 hover:bg-fuchsia-900/30 transition-colors disabled:opacity-40">
+                ✕ Reject {notCalcIds.length} non-calcs
               </button>
             )}
             {dupIds.length > 0 && (
@@ -1488,7 +1509,7 @@ function SubmissionsTab() {
           <button onClick={() => setFilterVerdict('')}
             className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
               !filterVerdict ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
-            }`}>all {calcs.length}</button>
+            }`}>all {baseCalcs.length}</button>
           {VERDICTS.filter(v => verdictCounts[v.key]).map(v => (
             <button key={v.key} onClick={() => setFilterVerdict(filterVerdict === v.key ? '' : v.key)} title={v.hint}
               className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
@@ -1507,10 +1528,15 @@ function SubmissionsTab() {
         <select value={filterMake} onChange={e => setFilterMake(e.target.value)}
           className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 focus:outline-none focus:border-zinc-600">
           <option value="">All brands</option>
-          {makes.map(m => <option key={m} value={m}>{m} ({calcs.filter(c => c.make === m).length})</option>)}
+          {makes.map(m => <option key={m} value={m}>{m} ({baseCalcs.filter(c => c.make === m).length})</option>)}
         </select>
-        {(search || filterMake || filterVerdict) && (
-          <button onClick={() => { setSearch(''); setFilterMake(''); setFilterVerdict(''); }}
+        <select value={filterType} onChange={e => setFilterType(e.target.value)}
+          className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 focus:outline-none focus:border-zinc-600">
+          <option value="">All types</option>
+          {types.map(t => <option key={t} value={t!}>{t} ({baseCalcs.filter(c => c.calc_type === t).length})</option>)}
+        </select>
+        {(search || filterMake || filterVerdict || filterType) && (
+          <button onClick={() => { setSearch(''); setFilterMake(''); setFilterVerdict(''); setFilterType(''); }}
             className="text-xs font-mono text-zinc-600 hover:text-zinc-300">✕ clear</button>
         )}
         <span className="text-[11px] font-mono text-zinc-600 ml-auto">{filtered.length} shown</span>
@@ -1575,6 +1601,11 @@ function SubmissionsTab() {
                           <button onClick={() => rename(c)} className="text-left hover:text-amber-400 transition-colors" title="Rename">
                             {c.model}
                           </button>
+                          {variantsOf[c.id]?.length ? (
+                            <p className="text-[10px] font-normal text-zinc-600 mt-0.5" title="Approved or rejected together with this model">
+                              + {variantsOf[c.id].map(v => v.variant_label || v.model).join(' · ')}
+                            </p>
+                          ) : null}
                         </td>
                         <td className="px-3 py-2">
                           {meta && (
