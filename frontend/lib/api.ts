@@ -275,6 +275,15 @@ export type TrendingCalcs = {
   new_this_week: Calculator[];
 };
 
+export type TriageVerdict = {
+  verdict: 'duplicate' | 'needs_fix' | 'fixable' | 'ready' | 'no_year';
+  issues?: string[];
+  duplicate_of?: string;
+  duplicate_of_label?: 'approved' | 'pending';
+  suggested_model?: string;
+  suggested_year?: number;
+};
+
 export type ActivityItem = {
   username: string;
   display_name: string | null;
@@ -723,6 +732,7 @@ export const api = {
       request<{ approved: number }>('/api/v1/admin/submissions/bulk-approve', { method: 'POST', body: JSON.stringify({ ids }) }),
     bulkReject: (ids: string[]) =>
       request<{ rejected: number }>('/api/v1/admin/submissions/bulk-reject', { method: 'POST', body: JSON.stringify({ ids }) }),
+    triage: () => request<Record<string, TriageVerdict>>('/api/v1/admin/submissions/triage'),
     emailStatus: () => request<{ configured: boolean; smtp_host: string | null; smtp_user: string | null }>('/api/v1/admin/email-status'),
     calcRequests: (status?: string) =>
       request<CalcRequest[]>(`/api/v1/calc-requests/admin${status ? `?status=${status}` : ''}`),

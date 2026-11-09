@@ -19,6 +19,7 @@ from app.models.image_submission import ImageSubmission
 from app.models.user import User
 from app.schemas.calculator import CalculatorPublic
 from app.schemas.user import UserAdminEntry, UserAdminUpdate
+from app.services.triage import Candidate, triage
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -490,6 +491,29 @@ async def list_pending_submissions(
         pub = CalculatorPublic.model_validate(calc)
         out.append(pub)
     return out
+
+
+@router.get("/submissions/triage", response_model=dict)
+async def triage_submissions(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_superuser),
+):
+    """Verdict per pending calc (duplicate / needs_fix / fixable / ready / no_year). Read-only."""
+    pending_r = await db.execute(
+        select(Calculator.id, Calculator.make, Calculator.model, Calculator.year_introduced)
+        .where(Calculator.status == "pending", Calculator.parent_id.is_(None))
+        .order_by(Calculator.created_at)
+    )
+    pending = [
+        Candidate(id=str(r.id), make=r.make, model=r.model, year=r.year_introduced, created_order=i)
+        for i, r in enumerate(pending_r.all())
+    ]
+    approved_r = await db.execute(
+        select(Calculator.id, Calculator.make, Calculator.model)
+        .where(Calculator.status == "approved", Calculator.parent_id.is_(None))
+    )
+    approved = [(str(r.id), r.make, r.model) for r in approved_r.all()]
+    return {cid: v.as_dict() for cid, v in triage(pending, approved).items()}
 
 
 @router.post("/calculators/{calc_id}/approve", response_model=CalculatorPublic)

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Calculator, type CalcRequest, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission, type Report } from '@/lib/api';
+import { api, type Calculator, type CalcRequest, type EditSuggestion, type AdminStats, type AdminUser, type ImageSubmission, type Report, type TriageVerdict } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const CALC_TYPES = ['scientific','graphing','financial','programmable','databank','printing','novelty','other'];
@@ -1332,65 +1332,115 @@ function ImportTab() {
 }
 
 /* ────────────────────────────── Submissions tab ── */
+const VERDICTS: { key: TriageVerdict['verdict']; label: string; badge: string; hint: string }[] = [
+  { key: 'ready',     label: 'Ready',      badge: 'text-green-400 bg-green-950/40 border-green-900/50',   hint: 'Clean name and a year' },
+  { key: 'no_year',   label: 'No year',    badge: 'text-zinc-400 bg-zinc-800/60 border-zinc-700',          hint: 'Clean name, year unknown' },
+  { key: 'fixable',   label: 'Fixable',    badge: 'text-sky-400 bg-sky-950/40 border-sky-900/50',          hint: 'Year stuck in the name — one click fixes it' },
+  { key: 'needs_fix', label: 'Needs fix',  badge: 'text-amber-400 bg-amber-950/40 border-amber-900/50',    hint: 'Name looks cut off by the scraper' },
+  { key: 'duplicate', label: 'Duplicate',  badge: 'text-red-400 bg-red-950/30 border-red-900/40',          hint: 'Same calc already approved or pending' },
+];
+const VERDICT_META = Object.fromEntries(VERDICTS.map(v => [v.key, v]));
+
 function SubmissionsTab() {
   const [calcs, setCalcs] = useState<Calculator[]>([]);
+  const [triage, setTriage] = useState<Record<string, TriageVerdict>>({});
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [filterMake, setFilterMake] = useState('');
+  const [filterVerdict, setFilterVerdict] = useState<TriageVerdict['verdict'] | ''>('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+
+  const refreshTriage = useCallback(() => api.admin.triage().then(setTriage).catch(() => {}), []);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    api.admin.pendingSubmissions()
-      .then(setCalcs)
+    Promise.all([api.admin.pendingSubmissions(), api.admin.triage().catch(() => ({}))])
+      .then(([c, t]) => { setCalcs(c); setTriage(t); })
       .catch(e => setError(e?.message || 'Failed to load submissions'))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  const verdictOf = (c: Calculator) => triage[c.id]?.verdict;
   const makes = useMemo(() => [...new Set(calcs.map(c => c.make))].sort(), [calcs]);
+  const byId = useMemo(() => Object.fromEntries(calcs.map(c => [c.id, c])), [calcs]);
+
+  const verdictCounts = useMemo(() => {
+    const n: Record<string, number> = {};
+    for (const c of calcs) { const v = triage[c.id]?.verdict; if (v) n[v] = (n[v] ?? 0) + 1; }
+    return n;
+  }, [calcs, triage]);
 
   const filtered = useMemo(() => calcs.filter(c => {
     if (filterMake && c.make !== filterMake) return false;
+    if (filterVerdict && triage[c.id]?.verdict !== filterVerdict) return false;
     if (search) return `${c.make} ${c.model}`.toLowerCase().includes(search.toLowerCase());
     return true;
-  }), [calcs, filterMake, search]);
+  }), [calcs, triage, filterMake, filterVerdict, search]);
 
   const grouped = useMemo(() => {
     const g: Record<string, Calculator[]> = {};
-    for (const c of filtered) {
-      if (!g[c.make]) g[c.make] = [];
-      g[c.make].push(c);
-    }
+    for (const c of filtered) (g[c.make] ??= []).push(c);
     return Object.entries(g).sort((a, b) => b[1].length - a[1].length);
   }, [filtered]);
 
   const setActingIds = (ids: string[], on: boolean) =>
     setActing(prev => { const n = new Set(prev); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
 
+  const removeLocal = (ids: string[]) => {
+    const gone = new Set(ids);
+    setCalcs(prev => prev.filter(c => !gone.has(c.id)));
+  };
+
   const approveMany = async (ids: string[]) => {
+    if (!ids.length) return;
     setActingIds(ids, true);
-    await api.admin.bulkApprove(ids).catch(() => {});
-    setCalcs(prev => prev.filter(c => !ids.includes(c.id)));
-    setActingIds(ids, false);
+    try { await api.admin.bulkApprove(ids); removeLocal(ids); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Approve failed'); }
+    finally { setActingIds(ids, false); refreshTriage(); }
   };
 
   const rejectMany = async (ids: string[]) => {
+    if (!ids.length) return;
     setActingIds(ids, true);
-    await api.admin.bulkReject(ids).catch(() => {});
-    setCalcs(prev => prev.filter(c => !ids.includes(c.id)));
-    setActingIds(ids, false);
+    try { await api.admin.bulkReject(ids); removeLocal(ids); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Reject failed'); }
+    finally { setActingIds(ids, false); refreshTriage(); }
+  };
+
+  const saveName = async (c: Calculator, model: string, year?: number) => {
+    setActingIds([c.id], true);
+    try {
+      const patch: Partial<Calculator> = { model };
+      if (year && !c.year_introduced) patch.year_introduced = year;
+      const updated = await api.calculators.update(c.id, patch);
+      setCalcs(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x));
+      await refreshTriage();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Rename failed'); }
+    finally { setActingIds([c.id], false); }
+  };
+
+  const rename = (c: Calculator) => {
+    const next = window.prompt(`Rename ${c.make} model`, c.model);
+    if (next && next.trim() && next.trim() !== c.model) saveName(c, next.trim());
+  };
+
+  const fixAll = async (ids: string[]) => {
+    for (const id of ids) {
+      const c = byId[id]; const t = triage[id];
+      if (c && t?.suggested_model) await saveName(c, t.suggested_model, t.suggested_year);
+    }
   };
 
   const toggleCollapse = (make: string) =>
     setCollapsed(prev => { const n = new Set(prev); n.has(make) ? n.delete(make) : n.add(make); return n; });
 
   if (loading) return <div className="text-zinc-600 font-mono text-sm animate-pulse py-8">Loading…</div>;
-  if (error) return (
+  if (error && calcs.length === 0) return (
     <div className="py-8 text-center">
       <p className="text-red-400 font-mono text-sm mb-3">{error}</p>
       <button onClick={load} className="text-xs font-mono text-zinc-500 hover:text-zinc-300">Retry</button>
@@ -1398,103 +1448,167 @@ function SubmissionsTab() {
   );
   if (calcs.length === 0) return (
     <div className="text-center py-16">
-      <p className="text-zinc-600 font-mono text-sm">No pending submissions</p>
+      <p className="text-zinc-600 font-mono text-sm">No pending submissions 🎉</p>
     </div>
   );
 
+  const dupIds = calcs.filter(c => verdictOf(c) === 'duplicate').map(c => c.id);
+  const fixableIds = calcs.filter(c => verdictOf(c) === 'fixable').map(c => c.id);
+
   return (
     <div className="space-y-4 max-w-4xl">
+      {error && (
+        <div className="flex items-center gap-3 bg-red-950/30 border border-red-900/40 rounded-lg px-3 py-2">
+          <p className="text-red-400 font-mono text-xs flex-1">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-400/60 hover:text-red-300 text-sm">×</button>
+        </div>
+      )}
+
+      {/* Triage summary */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Triage · {calcs.length} pending</p>
+          <div className="flex gap-2 flex-wrap">
+            {fixableIds.length > 0 && (
+              <button onClick={() => fixAll(fixableIds)} disabled={fixableIds.some(id => acting.has(id))}
+                className="text-xs font-mono px-2.5 py-1 rounded bg-sky-950/40 text-sky-400 border border-sky-900/50 hover:bg-sky-900/40 transition-colors disabled:opacity-40">
+                ✎ Fix {fixableIds.length} names
+              </button>
+            )}
+            {dupIds.length > 0 && (
+              <button onClick={() => { if (confirm(`Reject ${dupIds.length} duplicates? The better copy of each is kept.`)) rejectMany(dupIds); }}
+                disabled={dupIds.some(id => acting.has(id))}
+                className="text-xs font-mono px-2.5 py-1 rounded bg-red-950/30 text-red-400 border border-red-900/40 hover:bg-red-900/30 transition-colors disabled:opacity-40">
+                ✕ Reject {dupIds.length} duplicates
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => setFilterVerdict('')}
+            className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+              !filterVerdict ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+            }`}>all {calcs.length}</button>
+          {VERDICTS.filter(v => verdictCounts[v.key]).map(v => (
+            <button key={v.key} onClick={() => setFilterVerdict(filterVerdict === v.key ? '' : v.key)} title={v.hint}
+              className={`text-xs px-3 py-1 rounded-full font-mono border transition-colors ${
+                filterVerdict === v.key ? 'bg-amber-400 text-zinc-950 border-amber-400 font-bold' : v.badge
+              }`}>
+              {v.label} {verdictCounts[v.key]}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">{calcs.length} pending</span>
-        <input
-          type="search"
-          placeholder="Search model…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 w-44"
-        />
-        <select
-          value={filterMake}
-          onChange={e => setFilterMake(e.target.value)}
-          className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 focus:outline-none focus:border-zinc-600"
-        >
+        <input type="search" placeholder="Search model…" value={search} onChange={e => setSearch(e.target.value)}
+          className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 w-44" />
+        <select value={filterMake} onChange={e => setFilterMake(e.target.value)}
+          className="text-xs font-mono bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-zinc-300 focus:outline-none focus:border-zinc-600">
           <option value="">All brands</option>
-          {makes.map(m => (
-            <option key={m} value={m}>{m} ({calcs.filter(c => c.make === m).length})</option>
-          ))}
+          {makes.map(m => <option key={m} value={m}>{m} ({calcs.filter(c => c.make === m).length})</option>)}
         </select>
-        {(search || filterMake) && (
-          <button onClick={() => { setSearch(''); setFilterMake(''); }}
+        {(search || filterMake || filterVerdict) && (
+          <button onClick={() => { setSearch(''); setFilterMake(''); setFilterVerdict(''); }}
             className="text-xs font-mono text-zinc-600 hover:text-zinc-300">✕ clear</button>
         )}
+        <span className="text-[11px] font-mono text-zinc-600 ml-auto">{filtered.length} shown</span>
       </div>
 
       {/* Brand groups */}
       {grouped.map(([make, makeCalcs]) => {
         const isCollapsed = collapsed.has(make);
         const isBusy = makeCalcs.some(c => acting.has(c.id));
+        const readyIds = makeCalcs.filter(c => verdictOf(c) === 'ready').map(c => c.id);
+        const cleanIds = makeCalcs.filter(c => verdictOf(c) === 'ready' || verdictOf(c) === 'no_year').map(c => c.id);
         return (
           <div key={make} className="border border-zinc-800 rounded-xl overflow-hidden">
-            {/* Group header */}
-            <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900/80">
-              <button onClick={() => toggleCollapse(make)}
-                className="text-zinc-500 text-[10px] w-4 text-left select-none">
+            <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900/80 flex-wrap">
+              <button onClick={() => toggleCollapse(make)} className="text-zinc-500 text-[10px] w-4 text-left select-none">
                 {isCollapsed ? '▶' : '▼'}
               </button>
               <span className="font-mono font-bold text-zinc-200 text-sm">{make}</span>
-              <span className="text-[11px] font-mono text-zinc-500">{makeCalcs.length} calcs</span>
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  onClick={() => approveMany(makeCalcs.map(c => c.id))}
+              <span className="text-[11px] font-mono text-zinc-500">{makeCalcs.length} shown</span>
+              <div className="ml-auto flex items-center gap-2 flex-wrap">
+                {readyIds.length > 0 && (
+                  <button onClick={() => approveMany(readyIds)} disabled={isBusy}
+                    className="text-xs font-mono px-2.5 py-1 rounded bg-green-900/40 text-green-400 border border-green-900/50 hover:bg-green-900/60 transition-colors disabled:opacity-40">
+                    ✓ Approve {readyIds.length} ready
+                  </button>
+                )}
+                {cleanIds.length > readyIds.length && (
+                  <button onClick={() => approveMany(cleanIds)} disabled={isBusy}
+                    className="text-xs font-mono px-2.5 py-1 rounded bg-green-950/30 text-green-500/80 border border-green-900/40 hover:bg-green-900/40 transition-colors disabled:opacity-40"
+                    title="Ready + clean names without a year">
+                    ✓ + no-year ({cleanIds.length})
+                  </button>
+                )}
+                <button onClick={() => { if (confirm(`Reject all ${makeCalcs.length} shown ${make} submissions?`)) rejectMany(makeCalcs.map(c => c.id)); }}
                   disabled={isBusy}
-                  className="text-xs font-mono px-2.5 py-1 rounded bg-green-900/40 text-green-400 border border-green-900/50 hover:bg-green-900/60 transition-colors disabled:opacity-40"
-                >
-                  ✓ Approve all {make}
-                </button>
-                <button
-                  onClick={() => { if (confirm(`Reject all ${makeCalcs.length} ${make} submissions?`)) rejectMany(makeCalcs.map(c => c.id)); }}
-                  disabled={isBusy}
-                  className="text-xs font-mono px-2.5 py-1 rounded bg-red-900/20 text-red-400 border border-red-900/30 hover:bg-red-900/30 transition-colors disabled:opacity-40"
-                >
-                  ✕ Reject all
+                  className="text-xs font-mono px-2.5 py-1 rounded bg-red-900/20 text-red-400 border border-red-900/30 hover:bg-red-900/30 transition-colors disabled:opacity-40">
+                  ✕ Reject shown
                 </button>
               </div>
             </div>
 
-            {/* Compact table */}
             {!isCollapsed && (
               <table className="w-full">
                 <thead>
                   <tr className="border-t border-b border-zinc-800 text-zinc-600 text-[10px] font-mono uppercase tracking-wider">
                     <th className="text-left px-4 py-2">Model</th>
+                    <th className="text-left px-3 py-2">Triage</th>
                     <th className="text-left px-3 py-2 hidden sm:table-cell">Type</th>
                     <th className="text-left px-3 py-2 hidden sm:table-cell">Year</th>
-                    <th className="text-left px-3 py-2 hidden md:table-cell">Country</th>
-                    <th className="px-3 py-2 w-20"></th>
+                    <th className="px-3 py-2 w-24"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {makeCalcs.map(c => (
-                    <tr key={c.id}
-                      className={`border-b border-zinc-800/40 hover:bg-zinc-800/20 text-xs font-mono transition-opacity ${acting.has(c.id) ? 'opacity-30' : ''}`}
-                    >
-                      <td className="px-4 py-2 text-zinc-200 font-bold">{c.model}</td>
-                      <td className="px-3 py-2 text-zinc-500 hidden sm:table-cell">{c.calc_type || '—'}</td>
-                      <td className="px-3 py-2 text-zinc-500 hidden sm:table-cell">{c.year_introduced || '—'}</td>
-                      <td className="px-3 py-2 text-zinc-500 hidden md:table-cell">{c.country_of_origin || '—'}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-end gap-3">
-                          <Link href={`/calculators/${c.id}`} target="_blank"
-                            className="text-zinc-600 hover:text-amber-400 transition-colors" title="Preview">↗</Link>
-                          <button onClick={() => approveMany([c.id])} disabled={acting.has(c.id)}
-                            className="text-green-500 hover:text-green-300 transition-colors disabled:opacity-30 font-bold" title="Approve">✓</button>
-                          <button onClick={() => rejectMany([c.id])} disabled={acting.has(c.id)}
-                            className="text-red-500 hover:text-red-300 transition-colors disabled:opacity-30" title="Reject">✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {makeCalcs.map(c => {
+                    const t = triage[c.id];
+                    const meta = t ? VERDICT_META[t.verdict] : undefined;
+                    const dupTarget = t?.duplicate_of ? byId[t.duplicate_of] : undefined;
+                    return (
+                      <tr key={c.id}
+                        className={`border-b border-zinc-800/40 hover:bg-zinc-800/20 text-xs font-mono transition-opacity ${acting.has(c.id) ? 'opacity-30' : ''}`}>
+                        <td className="px-4 py-2 text-zinc-200 font-bold">
+                          <button onClick={() => rename(c)} className="text-left hover:text-amber-400 transition-colors" title="Rename">
+                            {c.model}
+                          </button>
+                        </td>
+                        <td className="px-3 py-2">
+                          {meta && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${meta.badge}`}
+                                title={t?.issues?.join(', ') || meta.hint}>{meta.label}</span>
+                              {t?.verdict === 'duplicate' && (
+                                t.duplicate_of_label === 'approved'
+                                  ? <Link href={`/calculators/${t.duplicate_of}`} target="_blank" className="text-[10px] text-zinc-500 hover:text-amber-400">of live ↗</Link>
+                                  : <span className="text-[10px] text-zinc-600 truncate max-w-[10rem]">of “{dupTarget?.model ?? 'pending copy'}”</span>
+                              )}
+                              {t?.verdict === 'needs_fix' && <span className="text-[10px] text-zinc-600">{t.issues?.join(', ')}</span>}
+                              {t?.verdict === 'fixable' && t.suggested_model && (
+                                <button onClick={() => saveName(c, t.suggested_model!, t.suggested_year)} disabled={acting.has(c.id)}
+                                  className="text-[10px] text-sky-400 hover:text-sky-300">→ “{t.suggested_model}”</button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-500 hidden sm:table-cell">{c.calc_type || '—'}</td>
+                        <td className="px-3 py-2 text-zinc-500 hidden sm:table-cell">{c.year_introduced || '—'}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-3">
+                            <Link href={`/calculators/${c.id}`} target="_blank"
+                              className="text-zinc-600 hover:text-amber-400 transition-colors" title="Preview">↗</Link>
+                            <button onClick={() => approveMany([c.id])} disabled={acting.has(c.id)}
+                              className="text-green-500 hover:text-green-300 transition-colors disabled:opacity-30 font-bold" title="Approve">✓</button>
+                            <button onClick={() => rejectMany([c.id])} disabled={acting.has(c.id)}
+                              className="text-red-500 hover:text-red-300 transition-colors disabled:opacity-30" title="Reject">✕</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
